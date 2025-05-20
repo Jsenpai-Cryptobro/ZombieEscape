@@ -5,7 +5,9 @@
 package Personajes;
 
 import GameLogic.Map;
+import java.awt.Point;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  *
@@ -41,20 +43,23 @@ public class ZombieThread extends Thread {
     }
 
     private boolean esObstaculo(int x, int y) {
-        int[][] mapa = map.getMapa();
-
-        // Fuera de los límites u obstáculo
-        if (x < 0 || x >= map.getMAP_WIDTH() || y < 0 || y >= map.getMAP_HEIGHT() || mapa[y][x] != 0) {
+        // Check map bounds
+        if (x < 0 || x >= map.getMAP_WIDTH() || y < 0 || y >= map.getMAP_HEIGHT()) {
             return true;
         }
 
-        // Hacer una copia sincronizada de la lista de zombies
+        // Check if tile is not empty (0 represents empty space)
+        if (map.getTileAt(x, y) != 0) {
+            return true;
+        }
+
+        // Make a synchronized copy of zombies list
         ArrayList<ZombieThread> zombies;
         synchronized (map.getManager().getZombies()) {
             zombies = new ArrayList<>(map.getManager().getZombies());
         }
 
-        // Verificar si hay otro zombie bloqueando
+        // Check if another zombie is blocking the position
         for (ZombieThread tp : zombies) {
             Zombie z = tp.getZombie();
             if (z != zombie && z.getX() == x && z.getY() == y) {

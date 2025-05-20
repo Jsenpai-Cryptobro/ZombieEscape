@@ -4,11 +4,13 @@
  */
 package Cliente;
 
+import GameLogic.PlayerState;
 import Servidor.ServidorJuego;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.List;
 
 /**
  *
@@ -16,13 +18,15 @@ import java.net.Socket;
  */
 public class ThreadCliente extends Thread {
 
-    private int x;
-    private int y;
     private Socket socket;
-    private ServidorJuego servidor;
     private DataInputStream entrada;
     private DataOutputStream salida;
+    private ServidorJuego servidor;
     private String nombre;
+    private boolean isAdmin = false;
+    private PlayerState estado = PlayerState.IN_WAITING_ROOM;
+    private int x; // Player's X coordinate
+    private int y; // Player's Y coordinate
 
     public ThreadCliente(Socket socket, ServidorJuego servidor) {
         this.socket = socket;
@@ -31,41 +35,37 @@ public class ThreadCliente extends Thread {
             entrada = new DataInputStream(socket.getInputStream());
             salida = new DataOutputStream(socket.getOutputStream());
         } catch (IOException ex) {
-            System.out.println("Error al crear streams: " + ex.getMessage());
+            System.out.println("Error creando streams: " + ex.getMessage());
         }
     }
-    
-    public DataOutputStream getSalida() {
-        return salida;
-    }
-    
+
+    // Getters and setters for coordinates
     public int getX() {
         return x;
+    }
+
+    public void setX(int x) {
+        this.x = x;
     }
 
     public int getY() {
         return y;
     }
 
+    public void setY(int y) {
+        this.y = y;
+    }
+
     public String getNombre() {
         return nombre;
     }
 
-    @Override
-    public void run() {
-        try {
-            nombre = entrada.readUTF();
-            servidor.registrarCliente(nombre, this);
+    public void setAdmin(boolean admin) {
+        isAdmin = admin;
+    }
 
-            while (true) {
-                int x = entrada.readInt();
-                int y = entrada.readInt();
-                servidor.actualizarPosicion(nombre, x, y);
-            }
-        } catch (IOException ex) {
-            System.out.println("Cliente desconectado: " + nombre);
-            servidor.getClientes().remove(nombre);
-        }
+    public DataOutputStream getSalida() {
+        return salida;
     }
 
     public void enviarPosicionInicial(int x, int y) throws IOException {
@@ -76,33 +76,60 @@ public class ThreadCliente extends Thread {
         salida.writeInt(y);
     }
 
-    public void enviarMapaInicial(int[][] mapa) throws IOException {
-        salida.writeUTF("MAPA_INICIAL");
-        salida.writeInt(mapa[0].length); // Ancho
-        salida.writeInt(mapa.length);    // Alto
-
-        // Enviar el mapa
-        for (int y = 0; y < mapa.length; y++) {
-            for (int x = 0; x < mapa[0].length; x++) {
-                salida.writeInt(mapa[y][x]);
-            }
-        }
-
-        // Enviar jugadores existentes
-        salida.writeInt(servidor.getClientes().size() - 1); // Excluye al propio jugador
-        for (ThreadCliente cliente : servidor.getClientes().values()) {
-            if (!cliente.getNombre().equals(this.nombre)) {
-                salida.writeUTF(cliente.getNombre());
-                salida.writeInt(cliente.getX());
-                salida.writeInt(cliente.getY());
-            }
-        }
-    }
-
-    public void enviarPosicion(String nombre, int x, int y) throws IOException {
-        salida.writeUTF(nombre);
+    public void enviarPosicion(String jugador, int x, int y) throws IOException {
+        salida.writeUTF("POSICION");
+        salida.writeUTF(jugador);
         salida.writeInt(x);
         salida.writeInt(y);
     }
 
+    public void enviarListaJugadores(List<String> jugadores) throws IOException {
+        salida.writeUTF("PLAYER_LIST");
+        salida.writeInt(jugadores.size());
+        for (String jugador : jugadores) {
+            salida.writeUTF(jugador);
+        }
+    }
+
+    public void enviarInicioJuego() throws IOException {
+        salida.writeUTF("GAME_START");
+    }
+
+    @Override
+    public void run() {
+        try {
+            nombre = entrada.readUTF();
+            salida.writeBoolean(isAdmin);
+            servidor.registrarCliente(nombre, this);
+
+            while (true) {
+                String mensaje = entrada.readUTF();
+                switch (mensaje) {
+                    case "START_GAME":
+                        if (isAdmin) {
+                            servidor.iniciarJuego(this);
+                        }
+                        break;
+                    case "MOVIMIENTO":
+                        // Read new position
+                        int newX = entrada.readInt();
+                        int newY = entrada.readInt();
+                        // Update position
+                        this.x = newX;
+                        this.y = newY;
+                        // Broadcast to other players
+                        servidor.actualizarPosicion(nombre, newX, newY);
+                        break;
+                }
+            }
+        } catch (IOException ex) {
+            System.out.println("Cliente desconectado: " + ex.getMessage());
+            try {
+                socket.close();
+            } catch (IOException e) {
+                System.out.println("Error cerrando socket: " + e.getMessage());
+            }
+            servidor.getClientes().remove(nombre);
+        }
+    }
 }

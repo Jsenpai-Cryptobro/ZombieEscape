@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author jsero
  */
+
 public class GameManager {
 
     //Atributos

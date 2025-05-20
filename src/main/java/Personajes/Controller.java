@@ -55,13 +55,13 @@ public class Controller implements KeyListener {
     }
 
     private boolean esMovimientoValido(int x, int y) {
-        // Verificar que las coordenadas estén dentro del mapa
+        // Verify coordinates are within map bounds
         if (x < 0 || x >= map.getMAP_WIDTH() || y < 0 || y >= map.getMAP_HEIGHT()) {
             return false;
         }
 
-        // Verificar que no sea un obstáculo
-        return map.getMapa()[y][x] != 1;
+        // Check if it's not an obstacle (tile value 1)
+        return map.getTileAt(x, y) != 1;
     }
 
     @Override

@@ -24,9 +24,10 @@ public class ServidorJuego {
     private HashMap<String, ThreadCliente> clientes = new HashMap<>();
     private ArrayList<int[]> spawnPoints = new ArrayList<>();
     private int[][] mapa;
+    private ThreadCliente adminCliente;
+    private boolean gameStarted = false;
 
     public ServidorJuego() {
-        // Configura puntos de spawn (deberías cargarlos de tu mapa)
         spawnPoints.add(new int[]{5, 5});
         spawnPoints.add(new int[]{10, 10});
         this.mapa = FileManager.cargarMapaDesdeArchivo("maps/mapa.txt");
@@ -37,7 +38,15 @@ public class ServidorJuego {
 
             while (true) {
                 Socket socket = server.accept();
-                new ThreadCliente(socket, this).start();
+                ThreadCliente cliente = new ThreadCliente(socket, this);
+
+                // First player becomes admin
+                if (adminCliente == null) {
+                    adminCliente = cliente;
+                    cliente.setAdmin(true);
+                }
+
+                cliente.start();
             }
         } catch (IOException ex) {
             System.out.println("Error en servidor: " + ex.getMessage());
@@ -67,17 +76,12 @@ public class ServidorJuego {
     }
 
     public synchronized void registrarCliente(String nombre, ThreadCliente hilo) throws IOException {
+        if (gameStarted) {
+            throw new IOException("Game already in progress");
+        }
+
         clientes.put(nombre, hilo);
-
-        // Asignar posición inicial
-        int[] spawn = obtenerPuntoSpawn();
-        hilo.enviarPosicionInicial(spawn[0], spawn[1]);
-
-        // Enviar mapa inicial
-        enviarMapaInicial(hilo);
-
-        // Notificar a otros jugadores
-        notificarNuevoJugador(nombre, spawn[0], spawn[1]);
+        broadcastPlayerList();
     }
 
     public synchronized void actualizarPosicion(String nombre, int x, int y) {
@@ -96,35 +100,50 @@ public class ServidorJuego {
         try {
             DataOutputStream salida = cliente.getSalida();
 
-            // 1. Enviar solo las diferencias respecto a mapa vacío
-            salida.writeInt(mapa[0].length); // Ancho
-            salida.writeInt(mapa.length);    // Alto
+            // Validate map dimensions
+            if (mapa == null || mapa.length == 0 || mapa[0].length == 0) {
+                throw new IOException("Invalid map data");
+            }
 
-            // 2. Enviar solo los tiles no vacíos (optimización)
+            // 1. Send map dimensions
+            int alto = mapa.length;
+            int ancho = mapa[0].length;
+
+            // Validate dimensions
+            if (ancho <= 0 || alto <= 0 || ancho > 1000 || alto > 1000) {
+                throw new IOException("Invalid map dimensions: " + ancho + "x" + alto);
+            }
+
+            salida.writeInt(ancho);
+            salida.writeInt(alto);
+
+            // 2. Count and send non-empty tiles
             int nonEmptyTiles = 0;
-            for (int y = 0; y < mapa.length; y++) {
-                for (int x = 0; x < mapa[0].length; x++) {
-                    if (mapa[y][x] != 0) { // 0 representa tile vacío
+            for (int y = 0; y < alto; y++) {
+                for (int x = 0; x < ancho; x++) {
+                    if (mapa[y][x] != 0) {
                         nonEmptyTiles++;
                     }
                 }
             }
 
-            salida.writeInt(nonEmptyTiles); // Cantidad de tiles no vacíos
+            salida.writeInt(nonEmptyTiles);
 
-            // Enviar solo los tiles no vacíos
-            for (int y = 0; y < mapa.length; y++) {
-                for (int x = 0; x < mapa[0].length; x++) {
+            // Send non-empty tile data
+            for (int y = 0; y < alto; y++) {
+                for (int x = 0; x < ancho; x++) {
                     if (mapa[y][x] != 0) {
-                        salida.writeInt(y); // Coordenada Y
-                        salida.writeInt(x); // Coordenada X
-                        salida.writeInt(mapa[y][x]); // Valor del tile
+                        salida.writeInt(y);
+                        salida.writeInt(x);
+                        salida.writeInt(mapa[y][x]);
                     }
                 }
             }
 
-            // 3. Enviar jugadores existentes
-            salida.writeInt(clientes.size() - 1); // Excluye al nuevo jugador
+            // 3. Send existing players
+            int playerCount = clientes.size() - 1;
+            salida.writeInt(playerCount);
+
             for (ThreadCliente otro : clientes.values()) {
                 if (!otro.getNombre().equals(cliente.getNombre())) {
                     salida.writeUTF(otro.getNombre());
@@ -137,9 +156,28 @@ public class ServidorJuego {
         }
     }
 
-    private void broadcastJugadores() {
-        // Enviar lista de jugadores a todos los clientes
-        // Implementar según necesidad
+    public synchronized void iniciarJuego(ThreadCliente iniciador) {
+        if (iniciador == adminCliente && !gameStarted) {
+            gameStarted = true;
+            for (ThreadCliente cliente : clientes.values()) {
+                try {
+                    cliente.enviarInicioJuego();
+                    enviarMapaInicial(cliente);
+                } catch (IOException ex) {
+                    System.out.println("Error al iniciar juego: " + ex.getMessage());
+                }
+            }
+        }
+    }
+
+    private void broadcastPlayerList() {
+        for (ThreadCliente cliente : clientes.values()) {
+            try {
+                cliente.enviarListaJugadores(new ArrayList<>(clientes.keySet()));
+            } catch (IOException ex) {
+                System.out.println("Error al enviar lista de jugadores: " + ex.getMessage());
+            }
+        }
     }
 
     public static void main(String[] args) {

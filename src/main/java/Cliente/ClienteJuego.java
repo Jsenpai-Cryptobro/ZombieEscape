@@ -4,11 +4,16 @@
  */
 package Cliente;
 
+import GUI.WaitingRoom;
 import GameLogic.Map;
+import GameLogic.PlayerState;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -24,6 +29,10 @@ public class ClienteJuego {
     private Map mapa;
     private String nombre;
     private boolean conectado = false;
+    private PlayerState estado = PlayerState.IN_WAITING_ROOM;
+    private WaitingRoom waitingRoom;
+    private JFrame waitingFrame;
+    private boolean isAdmin = false;
 
     // Constructor modificado para recibir el nombre
     public ClienteJuego(Map mapa, String nombre) {
@@ -40,15 +49,40 @@ public class ClienteJuego {
             // Enviar nombre al servidor
             salida.writeUTF(nombre);
 
-            // 1. Primero cargar el mapa desde el servidor
-            cargarMapaDesdeServidor();
+            // Receive admin status
+            isAdmin = entrada.readBoolean();
 
-            // 2. Luego iniciar el hilo para recibir actualizaciones continuas
+            // Show waiting room
+            mostrarWaitingRoom();
+
+            // Start receiving updates
             new Thread(this::recibirActualizaciones).start();
 
         } catch (IOException ex) {
             System.out.println("Error al conectar: " + ex.getMessage());
             JOptionPane.showMessageDialog(null, "Error al conectar al servidor", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void mostrarWaitingRoom() {
+        SwingUtilities.invokeLater(() -> {
+            waitingFrame = new JFrame("Waiting Room");
+            waitingRoom = new WaitingRoom(isAdmin, this);
+            waitingFrame.add(waitingRoom);
+            waitingFrame.pack();
+            waitingFrame.setLocationRelativeTo(null);
+            waitingFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            waitingFrame.setVisible(true);
+        });
+    }
+
+    public void enviarInicioJuego() {
+        if (isAdmin && conectado) {
+            try {
+                salida.writeUTF("START_GAME");
+            } catch (IOException ex) {
+                System.out.println("Error al enviar inicio de juego: " + ex.getMessage());
+            }
         }
     }
 
@@ -109,40 +143,65 @@ public class ClienteJuego {
     }
 
     private void cargarMapaDesdeServidor() throws IOException {
-        // 1. Recibir dimensiones
+        // 1. Receive dimensions with validation
         int ancho = entrada.readInt();
         int alto = entrada.readInt();
 
-        // Crear mapa vacío
-        int[][] mapaServidor = new int[alto][ancho]; // Inicializa todos a 0
-
-        // 2. Recibir solo tiles no vacíos
-        int nonEmptyTiles = entrada.readInt();
-        for (int i = 0; i < nonEmptyTiles; i++) {
-            int y = entrada.readInt();
-            int x = entrada.readInt();
-            int valor = entrada.readInt();
-            mapaServidor[y][x] = valor;
+        // Add size validation
+        if (ancho <= 0 || alto <= 0 || ancho > 1000 || alto > 1000) {
+            throw new IOException("Invalid map dimensions received: " + ancho + "x" + alto);
         }
 
-        // Actualizar mapa en el hilo de UI
-        SwingUtilities.invokeLater(() -> {
-            mapa.setMapa(mapaServidor);
-        });
+        try {
+            // Create map with validated dimensions
+            int[][] mapaServidor = new int[alto][ancho];
 
-        // 3. Recibir jugadores existentes
-        int numJugadores = entrada.readInt();
-        for (int i = 0; i < numJugadores; i++) {
-            String nombre = entrada.readUTF();
-            int x = entrada.readInt();
-            int y = entrada.readInt();
-            mapa.getManager().actualizarPosicionJugador(nombre, x, y);
+            // 2. Receive only non-empty tiles
+            int nonEmptyTiles = entrada.readInt();
+
+            // Validate number of non-empty tiles
+            if (nonEmptyTiles < 0 || nonEmptyTiles > (alto * ancho)) {
+                throw new IOException("Invalid number of non-empty tiles: " + nonEmptyTiles);
+            }
+
+            // Read tile data with bounds checking
+            for (int i = 0; i < nonEmptyTiles; i++) {
+                int y = entrada.readInt();
+                int x = entrada.readInt();
+                int valor = entrada.readInt();
+
+                // Validate coordinates
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    mapaServidor[y][x] = valor;
+                } else {
+                    System.err.println("Invalid tile coordinates received: " + x + "," + y);
+                }
+            }
+
+            // Update map in UI thread
+            SwingUtilities.invokeLater(() -> {
+                mapa.setMapa(mapaServidor);
+            });
+
+            // 3. Receive existing players
+            int numJugadores = entrada.readInt();
+            if (numJugadores < 0 || numJugadores > 100) { // reasonable limit for players
+                throw new IOException("Invalid number of players: " + numJugadores);
+            }
+
+            for (int i = 0; i < numJugadores; i++) {
+                String nombre = entrada.readUTF();
+                int x = entrada.readInt();
+                int y = entrada.readInt();
+                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
+                    SwingUtilities.invokeLater(() -> {
+                        mapa.getManager().actualizarPosicionJugador(nombre, x, y);
+                    });
+                }
+            }
+        } catch (OutOfMemoryError e) {
+            throw new IOException("Map too large to load: " + e.getMessage());
         }
-
-        // Actualizar mapa en el hilo de UI
-        SwingUtilities.invokeLater(() -> {
-            mapa.setMapa(mapaServidor);
-        });
     }
 
     private void recibirActualizaciones() {
@@ -150,6 +209,34 @@ public class ClienteJuego {
             while (true) {
                 String tipo = entrada.readUTF();
 
+                switch (tipo) {
+                    case "PLAYER_LIST":
+                        int numPlayers = entrada.readInt();
+                        List<String> players = new ArrayList<>();
+                        for (int i = 0; i < numPlayers; i++) {
+                            players.add(entrada.readUTF());
+                        }
+                        if (waitingRoom != null) {
+                            waitingRoom.updatePlayerList(players);
+                        }
+                        break;
+
+                    case "GAME_START":
+                        SwingUtilities.invokeLater(() -> {
+                            if (waitingFrame != null) {
+                                waitingFrame.dispose();
+                            }
+                        });
+                        cargarMapaDesdeServidor();
+                        break;
+
+                    case "PLAYER_READY":
+                        String readyPlayer = entrada.readUTF();
+                        if (waitingRoom != null) {
+                            waitingRoom.setPlayerReady(readyPlayer);
+                        }
+                        break;
+                }
                 if (tipo.equals("POSICION")) {
                     String nombreJugador = entrada.readUTF();
                     int x = entrada.readInt();

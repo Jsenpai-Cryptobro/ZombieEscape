@@ -12,7 +12,9 @@ import Personajes.ZombieThread;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Point;
 import java.util.ArrayList;
+import java.util.HashMap;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
@@ -27,43 +29,74 @@ public class Map extends JPanel {
     private int MAP_WIDTH, MAP_HEIGHT;
     private final int VIEW_WIDTH = 9, VIEW_HEIGHT = 9; //Tamaño de la vista del jugador
 
-    private int[][] mapa;
+    private HashMap<Point, Integer> mapaTiles;
 
     private Controller controller;
     private GameManager gManager;
 
     //Constructor, de una vez carga el mapa usando FileManager
     public Map() {
-        //Crea el manager
+        // Create the manager
         gManager = new GameManager(this);
 
-        //Crea mapa
-        mapa = FileManager.cargarMapaDesdeArchivo("maps/mapa.txt");
-        if (mapa == null) {
+        // Create map as HashMap
+        mapaTiles = new HashMap<>();
+
+        // Load initial map from file
+        int[][] initialMap = FileManager.cargarMapaDesdeArchivo("maps/mapa.txt");
+        if (initialMap == null) {
             JOptionPane.showMessageDialog(this, "No se pudo cargar el mapa.");
             System.exit(1);
         }
 
-        MAP_HEIGHT = mapa.length;
-        MAP_WIDTH = mapa[0].length;
+        // Set dimensions from initial map
+        MAP_HEIGHT = initialMap.length;
+        MAP_WIDTH = initialMap[0].length;
 
-        //Crea el personaje en el punto designado como spawn
+        // Convert array to HashMap and create entities
         for (int y = 0; y < MAP_HEIGHT; y++) {
             for (int x = 0; x < MAP_WIDTH; x++) {
-                if (mapa[y][x] == 4) {
+                int tileValue = initialMap[y][x];
+                if (tileValue != 0) {  // Only store non-zero tiles
+                    mapaTiles.put(new Point(x, y), tileValue);
+                }
+
+                // Handle special tiles
+                if (tileValue == 4) {  // Spawn point for player
                     gManager.setPersonaje(new Personaje(x, y, Color.BLUE));
                 }
-                if (mapa[y][x] == 2) {
+                if (tileValue == 2) {  // Spawn point for zombie
                     generarZombie(y, x);
                 }
             }
         }
-        //Agrega Dimensiones y KeyListenes para leer movimiento del jugador
+
+        // Add dimensions and key listeners for player movement
         setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
         setFocusable(true);
 
         controller = new Controller(this, null);
         addKeyListener(controller);
+    }
+
+    public void setMapa(int[][] nuevoMapa) {
+        MAP_HEIGHT = nuevoMapa.length;
+        MAP_WIDTH = nuevoMapa[0].length;
+        mapaTiles.clear();
+
+        // Only store non-zero tiles
+        for (int y = 0; y < MAP_HEIGHT; y++) {
+            for (int x = 0; x < MAP_WIDTH; x++) {
+                if (nuevoMapa[y][x] != 0) {
+                    mapaTiles.put(new Point(x, y), nuevoMapa[y][x]);
+                }
+            }
+        }
+        repaint();
+    }
+
+    public int getTile(int x, int y) {
+        return mapaTiles.getOrDefault(new Point(x, y), 0);
     }
 
     //SETTERS Y GETTERS
@@ -93,27 +126,35 @@ public class Map extends JPanel {
         this.MAP_HEIGHT = MAP_HEIGHT;
     }
 
-    public int[][] getMapa() {
-        return mapa;
-    }
-
-    public void setMapa(int[][] nuevoMapa) {
-        this.mapa = nuevoMapa;
-        this.MAP_WIDTH = nuevoMapa[0].length;
-        this.MAP_HEIGHT = nuevoMapa.length;
-        repaint();
-    }
-
     public GameManager getManager() {
         return gManager;
     }
 
-    public void generarZombie(int mapY, int mapX) {
-        mapa[mapY][mapX] = 0; //Lo marco como suelo porque ya se creo el zombie
-        Zombie zombie = new Zombie(mapX, mapY, Color.GREEN);
-        gManager.getZombiesInstancias().add(zombie); //Guarda el zombie
+    // Get tile value at specific coordinates
+    public int getTileAt(int x, int y) {
+        return mapaTiles.getOrDefault(new Point(x, y), 0); // Return 0 for empty tiles
+    }
 
-        //Crea e inicia el thread del zombie
+// Set tile value at specific coordinates
+    public void setTileAt(int x, int y, int value) {
+        if (value == 0) {
+            mapaTiles.remove(new Point(x, y));
+        } else {
+            mapaTiles.put(new Point(x, y), value);
+        }
+    }
+
+    // Check if coordinates are within map bounds
+    public boolean isInBounds(int x, int y) {
+        return x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
+    }
+
+    public void generarZombie(int mapY, int mapX) {
+        mapaTiles.remove(new Point(mapX, mapY)); // Remove the zombie spawn tile
+        Zombie zombie = new Zombie(mapX, mapY, Color.GREEN);
+        gManager.getZombiesInstancias().add(zombie); // Store the zombie instance
+
+        // Create and start the zombie thread
         ZombieThread thread = new ZombieThread(zombie, this);
         gManager.getZombies().add(thread);
         thread.start();
@@ -127,7 +168,7 @@ public class Map extends JPanel {
                 int mapX = camX + x;
                 int mapY = camY + y;
 
-                switch (mapa[mapY][mapX]) {
+                switch (getTileAt(mapX, mapY)) {
                     case 0 ->
                         g.setColor(Color.BLACK);  // Suelo
                     case 1 ->
@@ -196,7 +237,7 @@ public class Map extends JPanel {
             if (vx < 0 || vy < 0 || vx >= MAP_WIDTH || vy >= MAP_HEIGHT) {
                 break;
             }
-            if (mapa[vy][vx] == 1) { //Para que no pueda ver a travez de obstaculos
+            if (getTileAt(vx, vy) == 1){ //Para que no pueda ver a travez de obstaculos
                 break;
             }
 
