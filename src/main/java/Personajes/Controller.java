@@ -7,6 +7,7 @@ package Personajes;
 import GameLogic.Map;
 import GameLogic.Map;
 import Cliente.ClienteJuego;
+import GameLogic.PlayerState;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
@@ -26,6 +27,10 @@ public class Controller implements KeyListener {
 
     @Override
     public void keyPressed(KeyEvent e) {
+        if (cliente.getEstado() == PlayerState.MUERTO) {
+            return;
+        }
+        
         if (map != null && map.getManager().getPersonaje() != null) {
             Personaje personaje = map.getManager().getPersonaje();
             int newX = personaje.getX();

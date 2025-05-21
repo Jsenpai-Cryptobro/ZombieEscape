@@ -11,11 +11,14 @@ package GUI;
 import Cliente.ClienteJuego;
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 public class WaitingRoom extends JPanel {
 
+    private JComboBox<String> cbxMapas;
+    private String[] mapasDisponibles;
     private final JList<String> playerList;
     private final DefaultListModel<String> listModel;
     private final JButton startButton;
@@ -28,28 +31,49 @@ public class WaitingRoom extends JPanel {
         this.cliente = cliente;
         setLayout(new BorderLayout(10, 10));
 
-        // Create player list
-        listModel = new DefaultListModel<>();
-        playerList = new JList<>(listModel);
-        playerList.setBorder(BorderFactory.createTitledBorder("Players"));
+        // Panel principal superior con layout vertical
+        JPanel panelSuperior = new JPanel();
+        panelSuperior.setLayout(new BoxLayout(panelSuperior, BoxLayout.Y_AXIS));
 
-        // Create admin indicator
-        adminLabel = new JLabel(isAdmin ? "You are the admin" : "Waiting for admin to start...");
-        adminLabel.setHorizontalAlignment(JLabel.CENTER);
+        // Admin label
+        adminLabel = new JLabel(isAdmin ? "Eres el admin" : "Esperando a que el admin inicie...");
+        adminLabel.setAlignmentX(CENTER_ALIGNMENT);
+        panelSuperior.add(adminLabel);
 
-        // Create start button (only visible to admin)
-        startButton = new JButton("Start Game");
+        // Combo de mapas solo para admin
+        if (isAdmin) {
+            mapasDisponibles = obtenerMapasDisponibles();
+            cbxMapas = new JComboBox<>(mapasDisponibles);
+            cbxMapas.setAlignmentX(CENTER_ALIGNMENT);
+
+            JLabel mapaLabel = new JLabel("Selecciona mapa:");
+            mapaLabel.setAlignmentX(CENTER_ALIGNMENT);
+
+            panelSuperior.add(Box.createVerticalStrut(10));
+            panelSuperior.add(mapaLabel);
+            panelSuperior.add(cbxMapas);
+        }
+
+        // Botón de iniciar
+        startButton = new JButton("Iniciar Juego");
         startButton.setVisible(isAdmin);
+        startButton.setAlignmentX(CENTER_ALIGNMENT);
         startButton.addActionListener(e -> {
             if (isAdmin) {
                 cliente.enviarInicioJuego();
             }
         });
+        panelSuperior.add(Box.createVerticalStrut(10));
+        panelSuperior.add(startButton);
 
-        // Add components
+        // Lista de jugadores
+        listModel = new DefaultListModel<>();
+        playerList = new JList<>(listModel);
+        playerList.setBorder(BorderFactory.createTitledBorder("Jugadores"));
+
+        // Añadir componentes al frame principal
+        add(panelSuperior, BorderLayout.NORTH);
         add(new JScrollPane(playerList), BorderLayout.CENTER);
-        add(adminLabel, BorderLayout.NORTH);
-        add(startButton, BorderLayout.SOUTH);
 
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         setPreferredSize(new Dimension(300, 400));
@@ -73,5 +97,26 @@ public class WaitingRoom extends JPanel {
                 }
             }
         });
+    }
+
+    private String[] obtenerMapasDisponibles() {
+        File carpeta = new File("maps");
+        File[] archivos = carpeta.listFiles((dir, name) -> name.endsWith(".txt"));
+        if (archivos == null || archivos.length == 0) {
+            return new String[]{"mapa.txt"};
+        }
+
+        String[] nombres = new String[archivos.length];
+        for (int i = 0; i < archivos.length; i++) {
+            nombres[i] = archivos[i].getName();
+        }
+        return nombres;
+    }
+
+    public String getMapaSeleccionado() {
+        if (cbxMapas != null && cbxMapas.getSelectedItem() != null) {
+            return cbxMapas.getSelectedItem().toString();
+        }
+        return "mapa.txt";
     }
 }

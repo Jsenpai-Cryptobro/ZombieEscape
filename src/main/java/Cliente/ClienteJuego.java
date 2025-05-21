@@ -8,6 +8,9 @@ import GUI.WaitingRoom;
 import GameLogic.Map;
 import GameLogic.PlayerState;
 import Personajes.Controller;
+import Personajes.Zombie;
+import java.awt.Color;
+import java.awt.Dimension;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -35,9 +38,22 @@ public class ClienteJuego {
     private JFrame gameFrame;
     private JFrame waitingFrame;
     private boolean isAdmin = false;
+    private final List<Zombie> zombiesSincronizados = new ArrayList<>();
 
     public ClienteJuego(String nombre) {
         this.nombre = nombre;
+    }
+
+    public Map getMapa() {
+        return mapa;
+    }
+
+    public PlayerState getEstado() {
+        return estado;
+    }
+
+    public void setEstado(PlayerState estado) {
+        this.estado = estado;
     }
 
     public void conectar(String host, int port) {
@@ -46,16 +62,16 @@ public class ClienteJuego {
             entrada = new DataInputStream(socket.getInputStream());
             salida = new DataOutputStream(socket.getOutputStream());
 
-            // Enviar nombre al servidor
+            //Enviar nombre al servidor
             salida.writeUTF(nombre);
 
-            // Receive admin status
+            //Lo hace admin
             isAdmin = entrada.readBoolean();
 
             // Show waiting room
             mostrarWaitingRoom();
 
-            // Start receiving updates
+            //Recibe actualizaciones
             new Thread(this::recibirActualizaciones).start();
 
         } catch (IOException ex) {
@@ -80,6 +96,7 @@ public class ClienteJuego {
         if (isAdmin && estado == PlayerState.IN_WAITING_ROOM) {
             try {
                 salida.writeUTF("START_GAME");
+                salida.writeUTF(waitingRoom.getMapaSeleccionado()); // <-- AQUI se envía el nombre
             } catch (IOException ex) {
                 System.out.println("Error al enviar inicio de juego: " + ex.getMessage());
             }
@@ -160,6 +177,9 @@ public class ClienteJuego {
     }
 
     private void iniciarJuego() {
+        if (gameFrame != null) {
+            gameFrame.dispose();
+        }
         SwingUtilities.invokeLater(() -> {
             // Create game frame
             gameFrame = new JFrame("Zombie Escape - " + nombre);
@@ -167,6 +187,7 @@ public class ClienteJuego {
 
             // Create map
             mapa = new Map();
+            mapa.setZombiesSincronizados(zombiesSincronizados);
 
             // Create controller
             Controller controller = new Controller(mapa, this);
@@ -174,7 +195,7 @@ public class ClienteJuego {
 
             // Configure frame
             gameFrame.add(mapa);
-            gameFrame.pack();
+            gameFrame.setSize(mapa.getMAP_WIDTH() * 35 + 16, mapa.getMAP_HEIGHT() * 35 + 39);
             gameFrame.setLocationRelativeTo(null);
 
             // Hide waiting room and show game
@@ -226,8 +247,21 @@ public class ClienteJuego {
             SwingUtilities.invokeLater(() -> {
                 if (mapa != null) {
                     mapa.setMapa(mapaServidor);
-                    // Ensure map has focus for keyboard input
+                    if (estado == PlayerState.MUERTO) {
+                        mapa.setModoEspectador(true);
+                    }
+
                     mapa.requestFocusInWindow();
+
+                    // Ajustar tamaño exacto de ventana ahora que ya conocemos el tamaño real del mapa
+                    int w = mapa.getMAP_WIDTH() * 35 + 16;
+                    int h = mapa.getMAP_HEIGHT() * 35 + 39;
+
+                    if (gameFrame != null) {
+                        gameFrame.setSize(w, h);
+                        gameFrame.setMinimumSize(new Dimension(w, h));
+                        gameFrame.setLocationRelativeTo(null); // Centrar en pantalla
+                    }
                 }
             });
 
@@ -255,6 +289,14 @@ public class ClienteJuego {
     private void recibirActualizaciones() {
         try {
             while (true) {
+                //Verificar si no se cae
+                long lastPrint = System.currentTimeMillis();
+                if (System.currentTimeMillis() - lastPrint > 5000) {
+                    System.out.println("Cliente " + nombre + " sigue activo. Estado: " + estado);
+                    lastPrint = System.currentTimeMillis();
+                }
+
+                //Logica pues
                 String tipo = entrada.readUTF();
 
                 switch (tipo) {
@@ -299,6 +341,59 @@ public class ClienteJuego {
                             mapa.getManager().removerJugador(nombreDesconectado);
                         });
                         break;
+
+                    case "ZOMBIE_INICIAL":
+                        int cantidadZombies = entrada.readInt();
+                        zombiesSincronizados.clear();
+                        for (int i = 0; i < cantidadZombies; i++) {
+                            int zx = entrada.readInt();
+                            int zy = entrada.readInt();
+                            int direccion = entrada.readInt();
+                            Zombie zombie = new Zombie(zx, zy, Color.GREEN);
+                            zombie.setDireccion(direccion);
+                            zombiesSincronizados.add(zombie);
+                            System.out.println("Zombies recibidos: " + cantidadZombies);
+                        }
+                        SwingUtilities.invokeLater(() -> mapa.setZombiesSincronizados(zombiesSincronizados));
+                        break;
+
+                    case "ZOMBIE_UPDATE":
+                        int totalZombies = entrada.readInt();
+                        System.out.println("Cliente " + nombre + " recibió ZOMBIE_UPDATE (" + zombiesSincronizados.size() + " zombies)");
+
+                        for (int i = 0; i < totalZombies; i++) {
+                            int x = entrada.readInt();
+                            int y = entrada.readInt();
+                            int dir = entrada.readInt();
+                            if (i < zombiesSincronizados.size()) {
+                                Zombie z = zombiesSincronizados.get(i);
+                                z.setX(x);
+                                z.setY(y);
+                                z.setDireccion(dir);
+                            }
+                        }
+                        SwingUtilities.invokeLater(() -> mapa.repaint());
+                        break;
+                    case "MUERTO":
+                        estado = PlayerState.MUERTO;
+                        SwingUtilities.invokeLater(() -> {
+                            JOptionPane.showMessageDialog(null, "¡Has sido atrapado por un zombie!", "Derrota", JOptionPane.WARNING_MESSAGE);
+                            mapa.setModoEspectador(true);
+                            mapa.repaint();
+                        });
+                        break;
+                    case "VOLVER_A_SALA":
+                        estado = PlayerState.IN_WAITING_ROOM;
+
+                        SwingUtilities.invokeLater(() -> {
+                            if (gameFrame != null) {
+                                gameFrame.dispose(); // Cerrar juego
+                            }
+
+                            mostrarWaitingRoom(); // Volver a sala
+                        });
+                        break;
+
                 }
             }
         } catch (IOException ex) {

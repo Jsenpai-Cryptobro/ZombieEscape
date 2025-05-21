@@ -11,5 +11,6 @@ package GameLogic;
 public enum PlayerState {
     IN_WAITING_ROOM,
     READY,
-    IN_GAME
+    IN_GAME,
+    MUERTO
 }

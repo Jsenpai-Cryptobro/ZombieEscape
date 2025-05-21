@@ -25,8 +25,9 @@ public class ThreadCliente extends Thread {
     private String nombre;
     private boolean isAdmin = false;
     private PlayerState estado = PlayerState.IN_WAITING_ROOM;
-    private int x; // Player's X coordinate
-    private int y; // Player's Y coordinate
+    private int x;
+    private int y;
+    private boolean enMeta = false;
 
     public ThreadCliente(Socket socket, ServidorJuego servidor) {
         this.socket = socket;
@@ -39,7 +40,7 @@ public class ThreadCliente extends Thread {
         }
     }
 
-    // Getters and setters for coordinates
+    //GETTERS Y SETTERS
     public int getX() {
         return x;
     }
@@ -66,6 +67,22 @@ public class ThreadCliente extends Thread {
 
     public DataOutputStream getSalida() {
         return salida;
+    }
+
+    public PlayerState getEstado() {
+        return estado;
+    }
+
+    public void setEstado(PlayerState estado) {
+        this.estado = estado;
+    }
+
+    public boolean isEnMeta() {
+        return enMeta;
+    }
+
+    public void setEnMeta(boolean enMeta) {
+        this.enMeta = enMeta;
     }
 
     public void enviarPosicionInicial(int x, int y) throws IOException {
@@ -95,6 +112,14 @@ public class ThreadCliente extends Thread {
         salida.writeUTF("GAME_START");
     }
 
+    public void enviarMuerte() {
+        try {
+            salida.writeUTF("MUERTO");
+        } catch (IOException ex) {
+            System.out.println("Error al enviar muerte: " + ex.getMessage());
+        }
+    }
+
     @Override
     public void run() {
         try {
@@ -107,16 +132,17 @@ public class ThreadCliente extends Thread {
                 switch (mensaje) {
                     case "START_GAME":
                         if (isAdmin) {
-                            servidor.iniciarJuego(this);
+                            String nombreMapa = entrada.readUTF(); // <-- recibe el nombre del mapa del admin
+                            servidor.iniciarJuego(this, nombreMapa); // <-- pásalo al servidor
                         }
                         break;
                     case "MOVIMIENTO":
                         int newX = entrada.readInt();
                         int newY = entrada.readInt();
-                        // Update position
+                        //Cambiar posicion
                         this.x = newX;
                         this.y = newY;
-                        // Broadcast to other players
+                        //Mandarla al resto de jugadores
                         servidor.broadcastPosicion(nombre, newX, newY);
                         break;
                 }
