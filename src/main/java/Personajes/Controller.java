@@ -26,31 +26,36 @@ public class Controller implements KeyListener {
 
     @Override
     public void keyPressed(KeyEvent e) {
-        Personaje personaje = map.getManager().getPersonaje();
-        int nuevoX = personaje.getX();
-        int nuevoY = personaje.getY();
+        if (map != null && map.getManager().getPersonaje() != null) {
+            Personaje personaje = map.getManager().getPersonaje();
+            int newX = personaje.getX();
+            int newY = personaje.getY();
 
-        switch (e.getKeyCode()) {
-            case KeyEvent.VK_W ->
-                nuevoY--;
-            case KeyEvent.VK_S ->
-                nuevoY++;
-            case KeyEvent.VK_A ->
-                nuevoX--;
-            case KeyEvent.VK_D ->
-                nuevoX++;
-        }
-
-        // Verificar límites del mapa y obstáculos
-        if (esMovimientoValido(nuevoX, nuevoY)) {
-            personaje.setX(nuevoX);
-            personaje.setY(nuevoY);
-
-            if (cliente != null) {
-                cliente.enviarMovimiento(nuevoX, nuevoY);
+            switch (e.getKeyCode()) {
+                case KeyEvent.VK_W:
+                    newY--;
+                    break;
+                case KeyEvent.VK_S:
+                    newY++;
+                    break;
+                case KeyEvent.VK_A:
+                    newX--;
+                    break;
+                case KeyEvent.VK_D:
+                    newX++;
+                    break;
             }
 
-            map.repaint();
+            if (esMovimientoValido(newX, newY)) {
+                personaje.setX(newX);
+                personaje.setY(newY);
+                map.repaint();
+
+                // Send movement to server
+                if (cliente != null) {
+                    cliente.enviarMovimiento(newX, newY);
+                }
+            }
         }
     }
 

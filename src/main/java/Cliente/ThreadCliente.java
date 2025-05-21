@@ -111,25 +111,19 @@ public class ThreadCliente extends Thread {
                         }
                         break;
                     case "MOVIMIENTO":
-                        // Read new position
                         int newX = entrada.readInt();
                         int newY = entrada.readInt();
                         // Update position
                         this.x = newX;
                         this.y = newY;
                         // Broadcast to other players
-                        servidor.actualizarPosicion(nombre, newX, newY);
+                        servidor.broadcastPosicion(nombre, newX, newY);
                         break;
                 }
             }
         } catch (IOException ex) {
             System.out.println("Cliente desconectado: " + ex.getMessage());
-            try {
-                socket.close();
-            } catch (IOException e) {
-                System.out.println("Error cerrando socket: " + e.getMessage());
-            }
-            servidor.getClientes().remove(nombre);
+            servidor.clienteDesconectado(this);
         }
     }
 }

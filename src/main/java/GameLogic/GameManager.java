@@ -18,7 +18,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author jsero
  */
-
 public class GameManager {
 
     //Atributos
@@ -42,6 +41,10 @@ public class GameManager {
 
     public void setPersonaje(Personaje personaje) {
         this.personaje = personaje;
+        // Ensure map is repainted when player is set
+        if (mapa != null) {
+            mapa.repaint();
+        }
     }
 
     public List<ZombieThread> getZombies() {
@@ -64,6 +67,10 @@ public class GameManager {
         this.mapa = mapa;
     }
 
+    public HashMap<String, JugadorRemoto> getJugadoresRemotos() {
+        return jugadoresRemotos;
+    }
+
     //RESTO DE LOGICA
     public void detenerZombies() {
         for (ZombieThread thread : zombies) {
@@ -77,21 +84,22 @@ public class GameManager {
     }
 
     public void actualizarPosicionJugador(String nombre, int x, int y) {
-        JugadorRemoto jugador = jugadoresRemotos.get(nombre);
-        if (jugador == null) {
-            // Nuevo jugador
-            jugador = new JugadorRemoto(x, y, Color.RED, nombre);
-            jugadoresRemotos.put(nombre, jugador);
+        if (!jugadoresRemotos.containsKey(nombre)) {
+            // Create new remote player if it doesn't exist
+            jugadoresRemotos.put(nombre, new JugadorRemoto(x, y, Color.RED, nombre));
         } else {
-            // Actualizar posición existente
+            // Update existing player position
+            JugadorRemoto jugador = jugadoresRemotos.get(nombre);
             jugador.setX(x);
             jugador.setY(y);
         }
+        // Request repaint to show updated positions
         mapa.repaint();
     }
 
-    public HashMap<String, JugadorRemoto> getJugadoresRemotos() {
-        return jugadoresRemotos;
+    public void removerJugador(String nombre) {
+        jugadoresRemotos.remove(nombre);
+        mapa.repaint();
     }
 
 }

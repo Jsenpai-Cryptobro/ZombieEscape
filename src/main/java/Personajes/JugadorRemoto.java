@@ -11,7 +11,7 @@ import java.awt.Color;
  * @author jsero
  */
 public class JugadorRemoto extends Personaje {
-    
+
     private String nombre;
 
     public JugadorRemoto(int x, int y, Color color, String nombre) {
@@ -21,5 +21,9 @@ public class JugadorRemoto extends Personaje {
 
     public String getNombre() {
         return nombre;
+    }
+
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
     }
 }

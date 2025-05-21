@@ -7,6 +7,7 @@ package Cliente;
 import GUI.WaitingRoom;
 import GameLogic.Map;
 import GameLogic.PlayerState;
+import Personajes.Controller;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -31,12 +32,11 @@ public class ClienteJuego {
     private boolean conectado = false;
     private PlayerState estado = PlayerState.IN_WAITING_ROOM;
     private WaitingRoom waitingRoom;
+    private JFrame gameFrame;
     private JFrame waitingFrame;
     private boolean isAdmin = false;
 
-    // Constructor modificado para recibir el nombre
-    public ClienteJuego(Map mapa, String nombre) {
-        this.mapa = mapa;
+    public ClienteJuego(String nombre) {
         this.nombre = nombre;
     }
 
@@ -77,12 +77,27 @@ public class ClienteJuego {
     }
 
     public void enviarInicioJuego() {
-        if (isAdmin && conectado) {
+        if (isAdmin && estado == PlayerState.IN_WAITING_ROOM) {
             try {
                 salida.writeUTF("START_GAME");
             } catch (IOException ex) {
                 System.out.println("Error al enviar inicio de juego: " + ex.getMessage());
             }
+        }
+    }
+
+    private void handleGameStart() {
+        try {
+            iniciarJuego();
+            cargarMapaDesdeServidor();
+            estado = PlayerState.IN_GAME;
+            conectado = true;
+        } catch (IOException e) {
+            System.err.println("Error starting game: " + e.getMessage());
+            JOptionPane.showMessageDialog(null,
+                    "Error starting game: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -131,15 +146,44 @@ public class ClienteJuego {
     }
 
     public void enviarMovimiento(int x, int y) {
-        if (conectado) {
+        if (conectado && estado == PlayerState.IN_GAME) {
             try {
+                salida.writeUTF("MOVIMIENTO");
                 salida.writeInt(x);
                 salida.writeInt(y);
+                salida.flush();
             } catch (IOException ex) {
                 System.out.println("Error al enviar movimiento: " + ex.getMessage());
                 conectado = false;
             }
         }
+    }
+
+    private void iniciarJuego() {
+        SwingUtilities.invokeLater(() -> {
+            // Create game frame
+            gameFrame = new JFrame("Zombie Escape - " + nombre);
+            gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+            // Create map
+            mapa = new Map();
+
+            // Create controller
+            Controller controller = new Controller(mapa, this);
+            mapa.setController(controller);
+
+            // Configure frame
+            gameFrame.add(mapa);
+            gameFrame.pack();
+            gameFrame.setLocationRelativeTo(null);
+
+            // Hide waiting room and show game
+            if (waitingFrame != null) {
+                waitingFrame.dispose();
+            }
+            gameFrame.setVisible(true);
+            mapa.requestFocusInWindow();
+        });
     }
 
     private void cargarMapaDesdeServidor() throws IOException {
@@ -180,7 +224,11 @@ public class ClienteJuego {
 
             // Update map in UI thread
             SwingUtilities.invokeLater(() -> {
-                mapa.setMapa(mapaServidor);
+                if (mapa != null) {
+                    mapa.setMapa(mapaServidor);
+                    // Ensure map has focus for keyboard input
+                    mapa.requestFocusInWindow();
+                }
             });
 
             // 3. Receive existing players
@@ -222,12 +270,7 @@ public class ClienteJuego {
                         break;
 
                     case "GAME_START":
-                        SwingUtilities.invokeLater(() -> {
-                            if (waitingFrame != null) {
-                                waitingFrame.dispose();
-                            }
-                        });
-                        cargarMapaDesdeServidor();
+                        handleGameStart();
                         break;
 
                     case "PLAYER_READY":
@@ -236,19 +279,27 @@ public class ClienteJuego {
                             waitingRoom.setPlayerReady(readyPlayer);
                         }
                         break;
-                }
-                if (tipo.equals("POSICION")) {
-                    String nombreJugador = entrada.readUTF();
-                    int x = entrada.readInt();
-                    int y = entrada.readInt();
 
-                    SwingUtilities.invokeLater(() -> {
-                        if (!nombreJugador.equals(nombre)) {
-                            mapa.getManager().actualizarPosicionJugador(nombreJugador, x, y);
+                    case "POSICION":
+                        if (estado == PlayerState.IN_GAME) {
+                            String nombreJugador = entrada.readUTF();
+                            int x = entrada.readInt();
+                            int y = entrada.readInt();
+                            SwingUtilities.invokeLater(() -> {
+                                if (!nombreJugador.equals(nombre)) {
+                                    mapa.getManager().actualizarPosicionJugador(nombreJugador, x, y);
+                                }
+                            });
                         }
-                    });
+                        break;
+
+                    case "JUGADOR_DESCONECTADO":
+                        String nombreDesconectado = entrada.readUTF();
+                        SwingUtilities.invokeLater(() -> {
+                            mapa.getManager().removerJugador(nombreDesconectado);
+                        });
+                        break;
                 }
-                // Puedes añadir más tipos de mensajes aquí
             }
         } catch (IOException ex) {
             System.out.println("Desconectado del servidor");

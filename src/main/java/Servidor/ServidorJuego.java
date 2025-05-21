@@ -28,9 +28,9 @@ public class ServidorJuego {
     private boolean gameStarted = false;
 
     public ServidorJuego() {
+        // Configure spawn points
         spawnPoints.add(new int[]{5, 5});
         spawnPoints.add(new int[]{10, 10});
-        this.mapa = FileManager.cargarMapaDesdeArchivo("maps/mapa.txt");
 
         try {
             server = new ServerSocket(PORT);
@@ -159,12 +159,20 @@ public class ServidorJuego {
     public synchronized void iniciarJuego(ThreadCliente iniciador) {
         if (iniciador == adminCliente && !gameStarted) {
             gameStarted = true;
+            // Load map only when game starts
+            this.mapa = FileManager.cargarMapaDesdeArchivo("maps/mapa.txt");
+
+            if (mapa == null) {
+                System.err.println("Error loading map file");
+                return;
+            }
+
             for (ThreadCliente cliente : clientes.values()) {
                 try {
                     cliente.enviarInicioJuego();
                     enviarMapaInicial(cliente);
                 } catch (IOException ex) {
-                    System.out.println("Error al iniciar juego: " + ex.getMessage());
+                    System.out.println("Error al iniciar juego para " + cliente.getNombre() + ": " + ex.getMessage());
                 }
             }
         }
@@ -176,6 +184,31 @@ public class ServidorJuego {
                 cliente.enviarListaJugadores(new ArrayList<>(clientes.keySet()));
             } catch (IOException ex) {
                 System.out.println("Error al enviar lista de jugadores: " + ex.getMessage());
+            }
+        }
+    }
+
+    public synchronized void broadcastPosicion(String nombre, int x, int y) {
+        for (ThreadCliente cliente : clientes.values()) {
+            if (!cliente.getNombre().equals(nombre)) {
+                try {
+                    cliente.enviarPosicion(nombre, x, y);
+                } catch (IOException ex) {
+                    System.out.println("Error al enviar posición a " + cliente.getNombre() + ": " + ex.getMessage());
+                }
+            }
+        }
+    }
+
+    public synchronized void clienteDesconectado(ThreadCliente cliente) {
+        clientes.remove(cliente.getNombre());
+        // Notify other clients
+        for (ThreadCliente otros : clientes.values()) {
+            try {
+                otros.getSalida().writeUTF("JUGADOR_DESCONECTADO");
+                otros.getSalida().writeUTF(cliente.getNombre());
+            } catch (IOException ex) {
+                System.out.println("Error al notificar desconexión a " + otros.getNombre());
             }
         }
     }
