@@ -41,25 +41,26 @@ public class ZombieThread extends Thread {
             }
         }
     }
-
-    private boolean esObstaculo(int x, int y) {
-        // Check map bounds
+    
+    //Revisa todo lo que se considere un obstaculo para ver si cambia de direccion el zombie
+    public boolean esObstaculo(int x, int y) {
+        //Limites del mapa 
         if (x < 0 || x >= map.getMAP_WIDTH() || y < 0 || y >= map.getMAP_HEIGHT()) {
             return true;
         }
 
-        // Check if tile is not empty (0 represents empty space)
+        //Casilla distinta a 0 (por donde caminan los zombies)
         if (map.getTileAt(x, y) != 0) {
             return true;
         }
 
-        // Make a synchronized copy of zombies list
+        //Copia sincronizada de la lista de zombies, para revisar si se chocan entre ellos
         ArrayList<ZombieThread> zombies;
         synchronized (map.getManager().getZombies()) {
             zombies = new ArrayList<>(map.getManager().getZombies());
         }
 
-        // Check if another zombie is blocking the position
+        //Revisa si otro zombie le estorba
         for (ZombieThread tp : zombies) {
             Zombie z = tp.getZombie();
             if (z != zombie && z.getX() == x && z.getY() == y) {
@@ -69,37 +70,9 @@ public class ZombieThread extends Thread {
 
         return false;
     }
-
-    //Aun no lo implemento pues ni he agregado jugadores al manager pero deberia funcionar cuando lo tenga
-    /*private boolean jugadorDetectado() {
-        Personaje jugador = map.getManager().getPersonaje();
-        int zx = zombie.getX();
-        int zy = zombie.getY();
-
-        for (int i = 1; i <= 2; i++) {
-            int checkX = zx, checkY = zy;
-            switch (direccion) {
-                case 0 ->
-                    checkY -= i; 
-                case 1 ->
-                    checkX += i;
-                case 2 ->
-                    checkY += i;
-                case 3 ->
-                    checkX -= i;
-            }
-
-            if (checkX == jugador.getX() && checkY == jugador.getY()) {
-                return true;
-            }
-            if (esObstaculo(checkX, checkY)) {
-                return false; // pared bloquea la visión
-            }
-        }
-
-        return false;
-    }*/
-    private void moverZombie() {
+    
+    //Mueve el zombie en una direccion
+    public void moverZombie() {
         int dx = 0, dy = 0;
 
         switch (direccion) {

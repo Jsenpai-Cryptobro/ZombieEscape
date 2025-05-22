@@ -56,8 +56,6 @@ public class Zombie {
         this.direccion = direccion;
     }
     
-    
-
     //Dibujar el zombie
     public void dibujar(Graphics g, int pantallaX, int pantallaY) {
         g.setColor(color);

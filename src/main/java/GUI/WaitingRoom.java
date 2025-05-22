@@ -16,7 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class WaitingRoom extends JPanel {
-
+    
+    //Botones y varas que va a ir teniendo el Waiting Room
     private JComboBox<String> cbxMapas;
     private String[] mapasDisponibles;
     private final JList<String> playerList;
@@ -26,21 +27,22 @@ public class WaitingRoom extends JPanel {
     private final boolean isAdmin;
     private final ClienteJuego cliente;
 
+    //Aca se crea de una forma u otra dependiendo de si el jugador que entra es el admin o no
     public WaitingRoom(boolean isAdmin, ClienteJuego cliente) {
         this.isAdmin = isAdmin;
         this.cliente = cliente;
         setLayout(new BorderLayout(10, 10));
 
-        // Panel principal superior con layout vertical
+        //Panel principal
         JPanel panelSuperior = new JPanel();
         panelSuperior.setLayout(new BoxLayout(panelSuperior, BoxLayout.Y_AXIS));
 
-        // Admin label
+        //Label que indica si es admin o no
         adminLabel = new JLabel(isAdmin ? "Eres el admin" : "Esperando a que el admin inicie...");
         adminLabel.setAlignmentX(CENTER_ALIGNMENT);
         panelSuperior.add(adminLabel);
 
-        // Combo de mapas solo para admin
+        //Combo de mapas solo para admin
         if (isAdmin) {
             mapasDisponibles = obtenerMapasDisponibles();
             cbxMapas = new JComboBox<>(mapasDisponibles);
@@ -54,7 +56,7 @@ public class WaitingRoom extends JPanel {
             panelSuperior.add(cbxMapas);
         }
 
-        // Botón de iniciar
+        //Boton de iniciar juego
         startButton = new JButton("Iniciar Juego");
         startButton.setVisible(isAdmin);
         startButton.setAlignmentX(CENTER_ALIGNMENT);
@@ -66,19 +68,20 @@ public class WaitingRoom extends JPanel {
         panelSuperior.add(Box.createVerticalStrut(10));
         panelSuperior.add(startButton);
 
-        // Lista de jugadores
+        //Lista de jugadores (debo ver como hacer que se actualice con solo entrar porque solo se actualiza cuando entra gente
         listModel = new DefaultListModel<>();
         playerList = new JList<>(listModel);
         playerList.setBorder(BorderFactory.createTitledBorder("Jugadores"));
 
-        // Añadir componentes al frame principal
+        //Add componentes al principal
         add(panelSuperior, BorderLayout.NORTH);
         add(new JScrollPane(playerList), BorderLayout.CENTER);
 
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         setPreferredSize(new Dimension(300, 400));
     }
-
+    
+    //Actualiza la lista de jugadores del server
     public void updatePlayerList(List<String> players) {
         SwingUtilities.invokeLater(() -> {
             listModel.clear();
@@ -87,19 +90,9 @@ public class WaitingRoom extends JPanel {
             }
         });
     }
-
-    public void setPlayerReady(String playerName) {
-        SwingUtilities.invokeLater(() -> {
-            for (int i = 0; i < listModel.size(); i++) {
-                if (listModel.get(i).equals(playerName)) {
-                    listModel.set(i, playerName + " (Ready)");
-                    break;
-                }
-            }
-        });
-    }
-
-    private String[] obtenerMapasDisponibles() {
+    
+    //Agrega los mapas que esten en la carpeta de mapas al cbx
+    public String[] obtenerMapasDisponibles() {
         File carpeta = new File("maps");
         File[] archivos = carpeta.listFiles((dir, name) -> name.endsWith(".txt"));
         if (archivos == null || archivos.length == 0) {
@@ -112,7 +105,8 @@ public class WaitingRoom extends JPanel {
         }
         return nombres;
     }
-
+    
+    //Retorna el nombre del mapa seleccionado, is no simplemente un "mapa.txt"
     public String getMapaSeleccionado() {
         if (cbxMapas != null && cbxMapas.getSelectedItem() != null) {
             return cbxMapas.getSelectedItem().toString();

@@ -41,7 +41,6 @@ public class GameManager {
 
     public void setPersonaje(Personaje personaje) {
         this.personaje = personaje;
-        // Ensure map is repainted when player is set
         if (mapa != null) {
             mapa.repaint();
         }
@@ -71,7 +70,8 @@ public class GameManager {
         return jugadoresRemotos;
     }
 
-    //RESTO DE LOGICA
+    //RESTO DE METODOS(la idea era poner toda la logica del map y del servidorJuego aca para seguir un buen diseño y similar a la progra anterior)
+    //Me estoy quedando sin tiempo asi que lo pongo donde pueda y me funcione, una disculpa
     public void detenerZombies() {
         for (ZombieThread thread : zombies) {
             thread.detener();
@@ -85,15 +85,12 @@ public class GameManager {
 
     public void actualizarPosicionJugador(String nombre, int x, int y) {
         if (!jugadoresRemotos.containsKey(nombre)) {
-            // Create new remote player if it doesn't exist
             jugadoresRemotos.put(nombre, new JugadorRemoto(x, y, Color.RED, nombre));
         } else {
-            // Update existing player position
             JugadorRemoto jugador = jugadoresRemotos.get(nombre);
             jugador.setX(x);
             jugador.setY(y);
         }
-        // Request repaint to show updated positions
         mapa.repaint();
     }
 

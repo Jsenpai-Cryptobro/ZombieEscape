@@ -1,3 +1,4 @@
+
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
@@ -71,17 +72,16 @@ public class ServidorJuego {
         clientes.put(nombre, hilo);
         broadcastPlayerList();
     }
-
-    private void avanzarNivel() {
-        System.out.println("¡Avanzando de nivel!");
+    
+    //Cambia al siguiente nivel (Aca toda hacer que el los mapas tengan el nombre mapa#.txt) asi simplemente
+    //se crea un atributo de lvlActual y va cambiando conforme se supera un nivel
+    public void avanzarNivel() {
+        System.out.println("¡Avanzando nivel!");
         gameStarted = false;
 
-        // Por ahora, usa el siguiente archivo secuencialmente
-        // Ejemplo: nivel1.txt → nivel2.txt
-        // Podés usar un índice si querés mayor control
-        File archivoSiguiente = new File("maps/mapa2.txt"); // Cambia por lógica más robusta
+        File archivoSiguiente = new File("maps/mapa2.txt"); //Cambiar esto cuando tenga lvlActual
         if (!archivoSiguiente.exists()) {
-            System.out.println("No hay más niveles.");
+            System.out.println("No hay mas niveles.");
             return;
         }
 
@@ -96,7 +96,7 @@ public class ServidorJuego {
             }
         }
 
-        // Regenerar zombies si hace falta
+        //Regenerar zombies
         zombies.clear();
         for (int y = 0; y < mapa.length; y++) {
             for (int x = 0; x < mapa[0].length; x++) {
@@ -110,18 +110,19 @@ public class ServidorJuego {
 
         iniciarZombieManager();
     }
-
-    private void verificarMetaGlobal() {
-        System.out.println("Verificando si todos los jugadores llegaron a la meta...");
+    
+    //Verifica que todos esten en la meta para poder avanzar de nivel
+    public void verificarMetaGlobal() {
+        //System.out.println("Verificando si todos los jugadores llegaron a la meta");//Esto es para ver si se esta activando o no pq no me esta sirviendo
 
         for (ThreadCliente cliente : clientes.values()) {
             System.out.println(" - " + cliente.getNombre() + ": muerto=" + (cliente.getEstado() == PlayerState.MUERTO) + ", enMeta=" + cliente.isEnMeta());
             if (cliente.getEstado() != PlayerState.MUERTO && !cliente.isEnMeta()) {
-                return; // Aún falta alguien
+                return;
             }
         }
 
-        System.out.println("¡Todos los jugadores vivos llegaron a la meta!");
+        System.out.println("Todos los jugadores vivos llegaron a la meta");
         avanzarNivel();
     }
 
@@ -153,7 +154,7 @@ public class ServidorJuego {
     }
 
     //Envia el mapa a los clientes
-    private void enviarMapaInicial(ThreadCliente cliente) {
+    public void enviarMapaInicial(ThreadCliente cliente) {
         try {
             DataOutputStream salida = cliente.getSalida();
 
@@ -261,7 +262,7 @@ public class ServidorJuego {
         }
     }
 
-    private void volverASala() {
+    public void volverASala() {
         gameStarted = false;
         zombies.clear();
 
@@ -275,7 +276,7 @@ public class ServidorJuego {
         }
     }
 
-    private void verificarColisionesConJugadores() throws IOException {
+    public void verificarColisionesConJugadores() throws IOException {
         for (Zombie z : zombies) {
             int zx = z.getX();
             int zy = z.getY();
@@ -333,7 +334,7 @@ public class ServidorJuego {
 
     }
 
-    private void reiniciarJuegoExcepto(ThreadCliente muerto) {
+    public void reiniciarJuegoExcepto(ThreadCliente muerto) {
         for (ThreadCliente cliente : clientes.values()) {
             if (cliente != muerto && cliente.getEstado() != PlayerState.MUERTO) {
                 try {
@@ -345,8 +346,9 @@ public class ServidorJuego {
             }
         }
     }
-
-    private void iniciarZombieManager() {
+    
+    
+    public void iniciarZombieManager() {
         // Detener hilo anterior si está corriendo
         if (zombieManagerThread != null && zombieManagerThread.isAlive()) {
             zombieManagerThread.interrupt();
@@ -387,8 +389,9 @@ public class ServidorJuego {
         });
         zombieManagerThread.start();
     }
-
-    private void moverZombies() {
+    
+    //Va moviendo los zombies
+    public void moverZombies() {
         for (Zombie zombie : zombies) {
             int dx = 0, dy = 0;
             int dir = zombie.getDireccion();
@@ -415,8 +418,9 @@ public class ServidorJuego {
             }
         }
     }
-
-    private void enviarPosicionesZombies() {
+    
+    //Envia las posiciones actuales de los zombies al clienteJuego
+    public void enviarPosicionesZombies() {
         for (ThreadCliente cliente : clientes.values()) {
             try {
                 DataOutputStream out = cliente.getSalida();
@@ -432,8 +436,9 @@ public class ServidorJuego {
             }
         }
     }
-
-    private void enviarZombiesIniciales(ThreadCliente cliente) {
+    
+    //Envia la posicion inicial de los zombies al clienteJuego
+    public void enviarZombiesIniciales(ThreadCliente cliente) {
         try {
             DataOutputStream out = cliente.getSalida();
             out.writeUTF("ZOMBIE_INICIAL");
@@ -448,12 +453,12 @@ public class ServidorJuego {
         }
     }
 
-    private boolean esMovimientoValido(int x, int y) {
+    public boolean esMovimientoValido(int x, int y) {
         return x >= 0 && x < mapa[0].length && y >= 0 && y < mapa.length && mapa[y][x] == 0;
     }
 
     //Envia la lista de jugadores
-    private void broadcastPlayerList() {
+    public void broadcastPlayerList() {
         for (ThreadCliente cliente : clientes.values()) {
             try {
                 cliente.enviarListaJugadores(new ArrayList<>(clientes.keySet()));

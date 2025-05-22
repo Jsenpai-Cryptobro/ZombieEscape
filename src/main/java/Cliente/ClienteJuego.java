@@ -44,6 +44,7 @@ public class ClienteJuego {
         this.nombre = nombre;
     }
 
+    //GETTERS Y SETTERS
     public Map getMapa() {
         return mapa;
     }
@@ -56,6 +57,8 @@ public class ClienteJuego {
         this.estado = estado;
     }
 
+    //METODOS
+    //Conecta el cliente al servidor
     public void conectar(String host, int port) {
         try {
             socket = new Socket(host, port);
@@ -68,10 +71,10 @@ public class ClienteJuego {
             //Lo hace admin
             isAdmin = entrada.readBoolean();
 
-            // Show waiting room
+            //Muestra la sala de espera
             mostrarWaitingRoom();
 
-            //Recibe actualizaciones
+            //Thread para que reciba actualizaciones 
             new Thread(this::recibirActualizaciones).start();
 
         } catch (IOException ex) {
@@ -80,9 +83,10 @@ public class ClienteJuego {
         }
     }
 
-    private void mostrarWaitingRoom() {
+    //Crea el frame con la sala de espera
+    public void mostrarWaitingRoom() {
         SwingUtilities.invokeLater(() -> {
-            waitingFrame = new JFrame("Waiting Room");
+            waitingFrame = new JFrame("Sala de espera");
             waitingRoom = new WaitingRoom(isAdmin, this);
             waitingFrame.add(waitingRoom);
             waitingFrame.pack();
@@ -92,23 +96,31 @@ public class ClienteJuego {
         });
     }
 
+    //Manda el dato necesario para que cuando el server lo reciba inicie el juego
+    //(Agregar que minimos sean dos jugadores para poder iniciar)
     public void enviarInicioJuego() {
         if (isAdmin && estado == PlayerState.IN_WAITING_ROOM) {
             try {
                 salida.writeUTF("START_GAME");
-                salida.writeUTF(waitingRoom.getMapaSeleccionado()); // <-- AQUI se envía el nombre
+                salida.writeUTF(waitingRoom.getMapaSeleccionado());
             } catch (IOException ex) {
                 System.out.println("Error al enviar inicio de juego: " + ex.getMessage());
             }
         }
     }
 
-    private void handleGameStart() {
+    //Ayuda a hacer todo lo necesario para que el juego inicie
+    private void handleInicioJuego() {
         try {
             iniciarJuego();
             cargarMapaDesdeServidor();
             estado = PlayerState.IN_GAME;
             conectado = true;
+
+            // Asegurar que no esté en modo espectador al iniciar juego
+            if (mapa != null) {
+                mapa.setModoEspectador(false);
+            }
         } catch (IOException e) {
             System.err.println("Error starting game: " + e.getMessage());
             JOptionPane.showMessageDialog(null,
@@ -118,50 +130,7 @@ public class ClienteJuego {
         }
     }
 
-    private void recibirDatos() {
-        try {
-            while (true) {
-                String tipo = entrada.readUTF();
-
-                switch (tipo) {
-                    case "POSICION_INICIAL":
-                        int x = entrada.readInt();
-                        int y = entrada.readInt();
-                        SwingUtilities.invokeLater(() -> {
-                            mapa.getManager().getPersonaje().setX(x);
-                            mapa.getManager().getPersonaje().setY(y);
-                        });
-                        break;
-
-                    case "MAPA_INICIAL":
-                        int ancho = entrada.readInt();
-                        int alto = entrada.readInt();
-                        int[][] mapaServidor = new int[alto][ancho];
-                        for (int i = 0; i < alto; i++) {
-                            for (int j = 0; j < ancho; j++) {
-                                mapaServidor[j][i] = entrada.readInt();
-                            }
-                        }
-                        SwingUtilities.invokeLater(() -> {
-                            mapa.setMapa(mapaServidor);
-                        });
-                        break;
-
-                    case "JUGADOR":
-                        String nombreJugador = entrada.readUTF();
-                        int jugadorX = entrada.readInt();
-                        int jugadorY = entrada.readInt();
-                        SwingUtilities.invokeLater(() -> {
-                            mapa.getManager().actualizarPosicionJugador(nombreJugador, jugadorX, jugadorY);
-                        });
-                        break;
-                }
-            }
-        } catch (IOException ex) {
-            System.out.println("Desconectado del servidor");
-        }
-    }
-
+    //Envia el movimiento de este cliente
     public void enviarMovimiento(int x, int y) {
         if (conectado && estado == PlayerState.IN_GAME) {
             try {
@@ -176,29 +145,30 @@ public class ClienteJuego {
         }
     }
 
-    private void iniciarJuego() {
+    //Crea cosas necesarias para poder crear el juego, frames, controllers, y cierra sala de espera
+    public void iniciarJuego() {
         if (gameFrame != null) {
             gameFrame.dispose();
         }
         SwingUtilities.invokeLater(() -> {
-            // Create game frame
+            //Crea un frame que se cierra al salir
             gameFrame = new JFrame("Zombie Escape - " + nombre);
             gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-            // Create map
+            //Crea mapa
             mapa = new Map();
             mapa.setZombiesSincronizados(zombiesSincronizados);
 
-            // Create controller
+            //Crea el controller(recibe las señales del teclado)
             Controller controller = new Controller(mapa, this);
             mapa.setController(controller);
 
-            // Configure frame
+            //Termina de configurar el frame
             gameFrame.add(mapa);
             gameFrame.setSize(mapa.getMAP_WIDTH() * 35 + 16, mapa.getMAP_HEIGHT() * 35 + 39);
             gameFrame.setLocationRelativeTo(null);
 
-            // Hide waiting room and show game
+            //Cierra la sala de espera para dar paso al mapa de juego
             if (waitingFrame != null) {
                 waitingFrame.dispose();
             }
@@ -207,43 +177,37 @@ public class ClienteJuego {
         });
     }
 
-    private void cargarMapaDesdeServidor() throws IOException {
-        // 1. Receive dimensions with validation
+    //Carga y crea el mapa que recibe del server
+    public void cargarMapaDesdeServidor() throws IOException {
+        //Recibe las dimensiones del mapa y las valida
         int ancho = entrada.readInt();
         int alto = entrada.readInt();
 
-        // Add size validation
         if (ancho <= 0 || alto <= 0 || ancho > 1000 || alto > 1000) {
             throw new IOException("Invalid map dimensions received: " + ancho + "x" + alto);
         }
 
         try {
-            // Create map with validated dimensions
             int[][] mapaServidor = new int[alto][ancho];
-
-            // 2. Receive only non-empty tiles
             int nonEmptyTiles = entrada.readInt();
 
-            // Validate number of non-empty tiles
             if (nonEmptyTiles < 0 || nonEmptyTiles > (alto * ancho)) {
-                throw new IOException("Invalid number of non-empty tiles: " + nonEmptyTiles);
+                throw new IOException("Numero invalido de casillas no vacias: " + nonEmptyTiles);
             }
 
-            // Read tile data with bounds checking
             for (int i = 0; i < nonEmptyTiles; i++) {
                 int y = entrada.readInt();
                 int x = entrada.readInt();
                 int valor = entrada.readInt();
 
-                // Validate coordinates
                 if (x >= 0 && x < ancho && y >= 0 && y < alto) {
                     mapaServidor[y][x] = valor;
                 } else {
-                    System.err.println("Invalid tile coordinates received: " + x + "," + y);
+                    System.err.println("Coordenadas invalidas: " + x + "," + y);
                 }
             }
 
-            // Update map in UI thread
+            //Actualiza UI
             SwingUtilities.invokeLater(() -> {
                 if (mapa != null) {
                     mapa.setMapa(mapaServidor);
@@ -253,21 +217,21 @@ public class ClienteJuego {
 
                     mapa.requestFocusInWindow();
 
-                    // Ajustar tamaño exacto de ventana ahora que ya conocemos el tamaño real del mapa
+                    //Ajusta tamaño de ventana a tamaño del mapa (REVISAR ESTO)
                     int w = mapa.getMAP_WIDTH() * 35 + 16;
                     int h = mapa.getMAP_HEIGHT() * 35 + 39;
 
                     if (gameFrame != null) {
                         gameFrame.setSize(w, h);
                         gameFrame.setMinimumSize(new Dimension(w, h));
-                        gameFrame.setLocationRelativeTo(null); // Centrar en pantalla
+                        gameFrame.setLocationRelativeTo(null);
                     }
                 }
             });
 
-            // 3. Receive existing players
+            //Recibe los jugadores
             int numJugadores = entrada.readInt();
-            if (numJugadores < 0 || numJugadores > 100) { // reasonable limit for players
+            if (numJugadores < 0 || numJugadores > 10) {
                 throw new IOException("Invalid number of players: " + numJugadores);
             }
 
@@ -286,21 +250,21 @@ public class ClienteJuego {
         }
     }
 
-    private void recibirActualizaciones() {
+    //Hace los cambios necesarios en la pantalla de cada jugador segun sea lo indicado
+    public void recibirActualizaciones() {
         try {
             while (true) {
-                //Verificar si no se cae
+                //Verificar si no se cae por algun motivo(El modo espectador me esta dejando de funcionar sepa dios por que)
                 long lastPrint = System.currentTimeMillis();
                 if (System.currentTimeMillis() - lastPrint > 5000) {
                     System.out.println("Cliente " + nombre + " sigue activo. Estado: " + estado);
                     lastPrint = System.currentTimeMillis();
                 }
 
-                //Logica pues
                 String tipo = entrada.readUTF();
 
                 switch (tipo) {
-                    case "PLAYER_LIST":
+                    case "PLAYER_LIST": //Actualiza la lista de jugadores (se cambia en la sala de espera)
                         int numPlayers = entrada.readInt();
                         List<String> players = new ArrayList<>();
                         for (int i = 0; i < numPlayers; i++) {
@@ -311,18 +275,11 @@ public class ClienteJuego {
                         }
                         break;
 
-                    case "GAME_START":
-                        handleGameStart();
+                    case "GAME_START": //Inicia el juego
+                        handleInicioJuego();
                         break;
 
-                    case "PLAYER_READY":
-                        String readyPlayer = entrada.readUTF();
-                        if (waitingRoom != null) {
-                            waitingRoom.setPlayerReady(readyPlayer);
-                        }
-                        break;
-
-                    case "POSICION":
+                    case "POSICION": //Actualiza la posicion de los jugadores
                         if (estado == PlayerState.IN_GAME) {
                             String nombreJugador = entrada.readUTF();
                             int x = entrada.readInt();
@@ -335,14 +292,14 @@ public class ClienteJuego {
                         }
                         break;
 
-                    case "JUGADOR_DESCONECTADO":
+                    case "JUGADOR_DESCONECTADO": //Avisa si un jugador se desconecto y lo remueve del mapa
                         String nombreDesconectado = entrada.readUTF();
                         SwingUtilities.invokeLater(() -> {
                             mapa.getManager().removerJugador(nombreDesconectado);
                         });
                         break;
 
-                    case "ZOMBIE_INICIAL":
+                    case "ZOMBIE_INICIAL": //Pone los zombies en el mapa en su posicion inicial
                         int cantidadZombies = entrada.readInt();
                         zombiesSincronizados.clear();
                         for (int i = 0; i < cantidadZombies; i++) {
@@ -357,7 +314,7 @@ public class ClienteJuego {
                         SwingUtilities.invokeLater(() -> mapa.setZombiesSincronizados(zombiesSincronizados));
                         break;
 
-                    case "ZOMBIE_UPDATE":
+                    case "ZOMBIE_UPDATE": //Actualiza posicion zombies y su campo de vision
                         int totalZombies = entrada.readInt();
                         System.out.println("Cliente " + nombre + " recibió ZOMBIE_UPDATE (" + zombiesSincronizados.size() + " zombies)");
 
@@ -374,7 +331,8 @@ public class ClienteJuego {
                         }
                         SwingUtilities.invokeLater(() -> mapa.repaint());
                         break;
-                    case "MUERTO":
+
+                    case "MUERTO": //Si un jugador muere se reinicia el  nivel y el que murio se vuelve espectador
                         estado = PlayerState.MUERTO;
                         SwingUtilities.invokeLater(() -> {
                             JOptionPane.showMessageDialog(null, "¡Has sido atrapado por un zombie!", "Derrota", JOptionPane.WARNING_MESSAGE);
@@ -382,15 +340,16 @@ public class ClienteJuego {
                             mapa.repaint();
                         });
                         break;
-                    case "VOLVER_A_SALA":
+
+                    case "VOLVER_A_SALA": //Si todos mueren vuelve a sala de espera
                         estado = PlayerState.IN_WAITING_ROOM;
 
                         SwingUtilities.invokeLater(() -> {
                             if (gameFrame != null) {
-                                gameFrame.dispose(); // Cerrar juego
+                                gameFrame.dispose();
                             }
 
-                            mostrarWaitingRoom(); // Volver a sala
+                            mostrarWaitingRoom();
                         });
                         break;
 

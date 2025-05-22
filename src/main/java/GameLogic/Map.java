@@ -26,12 +26,12 @@ import javax.swing.JPanel;
 public class Map extends JPanel {
 
     //Atributos
-    private int TILE_SIZE = 35;
+    private int TILE_SIZE = 35; //Tamaño de los cuadros de la matriz
     private int MAP_WIDTH, MAP_HEIGHT;
     private int VIEW_WIDTH = 9, VIEW_HEIGHT = 9; //Tamaño de la vista del jugador
 
-    private HashMap<Point, Integer> mapaTiles;
-    private List<Zombie> zombiesSincronizados = new ArrayList<>();
+    private HashMap<Point, Integer> mapaTiles; //Mapa que funciona con hash porque la matriz sola me estaba cagando la existencia para metodos que hice luego
+    private List<Zombie> zombiesSincronizados = new ArrayList<>(); 
 
     private Controller controller;
     private GameManager gManager;
@@ -40,21 +40,16 @@ public class Map extends JPanel {
 
     //Constructor, de una vez carga el mapa usando FileManager
     public Map() {
-        // Create manager
         gManager = new GameManager(this);
-
-        // Initialize empty map
         mapaTiles = new HashMap<>();
-
-        // Set initial dimensions
-        //setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
         setFocusable(true);
     }
-
+    
+    //GETTERS Y SETTERS
     public void setModoEspectador(boolean b) {
         this.modoEspectador = b;
 
-        // Al entrar a modo espectador, eliminar personaje
+        //Al entrar a modo espectador, elimina el personaje que murio
         if (b) {
             gManager.setPersonaje(null);
             VIEW_WIDTH = MAP_WIDTH;
@@ -64,7 +59,7 @@ public class Map extends JPanel {
             repaint();
         }
     }
-
+    
     public void setZombiesSincronizados(List<Zombie> zombies) {
         this.zombiesSincronizados = zombies;
         repaint();
@@ -90,12 +85,12 @@ public class Map extends JPanel {
             }
         }
 
-        // Si es espectador, ajustar la vista al tamaño completo del mapa
+        //Ajusta vista a la del espectador
         if (modoEspectador) {
             VIEW_WIDTH = MAP_WIDTH;
             VIEW_HEIGHT = MAP_HEIGHT;
             setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
-            revalidate(); // <-- importante para que el contenedor lo ajuste
+            revalidate();
         }
 
         repaint();
@@ -104,8 +99,7 @@ public class Map extends JPanel {
     public int getTile(int x, int y) {
         return mapaTiles.getOrDefault(new Point(x, y), 0);
     }
-
-    //SETTERS Y GETTERS
+    
     public void setController(Controller controller) {
         removeKeyListener(this.controller);
         this.controller = controller;
@@ -136,12 +130,11 @@ public class Map extends JPanel {
         return gManager;
     }
 
-    // Get tile value at specific coordinates
+    //Valor de una casilla en coordenadas especificas
     public int getTileAt(int x, int y) {
-        return mapaTiles.getOrDefault(new Point(x, y), 0); // Return 0 for empty tiles
+        return mapaTiles.getOrDefault(new Point(x, y), 0); 
     }
 
-// Set tile value at specific coordinates
     public void setTileAt(int x, int y, int value) {
         if (value == 0) {
             mapaTiles.remove(new Point(x, y));
@@ -150,17 +143,17 @@ public class Map extends JPanel {
         }
     }
 
-    // Check if coordinates are within map bounds
+    //Revisa si esta dentro del tamaño del mapa
     public boolean isInBounds(int x, int y) {
         return x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
     }
-
+    
+    //Genera los zombies en el mapa
     public void generarZombie(int mapY, int mapX) {
-        mapaTiles.remove(new Point(mapX, mapY)); // Remove the zombie spawn tile
+        mapaTiles.remove(new Point(mapX, mapY)); 
         Zombie zombie = new Zombie(mapX, mapY, Color.GREEN);
-        gManager.getZombiesInstancias().add(zombie); // Store the zombie instance
+        gManager.getZombiesInstancias().add(zombie); 
 
-        // Create and start the zombie thread
         ZombieThread thread = new ZombieThread(zombie, this);
         gManager.getZombies().add(thread);
         thread.start();
@@ -168,7 +161,7 @@ public class Map extends JPanel {
 
     //Funciones Auxiliares para ir pintando el mapa
     //Pues pinta las casillas del mapa
-    private void paintMapa(Graphics g, int camX, int camY) {
+    public void paintMapa(Graphics g, int camX, int camY) {
         for (int y = 0; y < VIEW_HEIGHT; y++) {
             for (int x = 0; x < VIEW_WIDTH; x++) {
                 int mapX = camX + x;
@@ -191,7 +184,7 @@ public class Map extends JPanel {
     }
 
     //Pinta el jugador, en la posicion actual en la que este
-    private void paintJugador(Graphics g, Personaje personaje, int camX, int camY) {
+    public void paintJugador(Graphics g, Personaje personaje, int camX, int camY) {
         if (personaje == null) {
             return;
         }
@@ -213,7 +206,7 @@ public class Map extends JPanel {
     }
 
     //Pinta el zombie
-    private void paintZombies(Graphics g, int camX, int camY) {
+    public void paintZombies(Graphics g, int camX, int camY) {
         for (Zombie zombie : zombiesSincronizados) {
             paintCampoVision(g, zombie, camX, camY);
 
@@ -227,7 +220,7 @@ public class Map extends JPanel {
     }
 
     //Pinta el campo de vision del zombie
-    private void paintCampoVision(Graphics g, Zombie zombie, int camX, int camY) {
+    public void paintCampoVision(Graphics g, Zombie zombie, int camX, int camY) {
         int dx = 0, dy = 0;
         switch (zombie.getDireccion()) {
             case 0 ->
@@ -262,26 +255,26 @@ public class Map extends JPanel {
 
     //Aca es donde se van pintando todos los componentes de la camara, con cada movimiento o suceso se actualiza
     @Override
-    protected void paintComponent(Graphics g) {
+    public void paintComponent(Graphics g) {
 
         super.paintComponent(g);
         Personaje personaje = gManager.getPersonaje();
 
         if (modoEspectador) {
-            personaje = null; // Forzar no usar personaje si es espectador
+            personaje = null; //Forzar que si es espectador no tenga personaje
         }
 
         int camX = 0, camY = 0;
         int viewW, viewH;
 
         if (modoEspectador || personaje == null) {
-            // Forzar cámara para ver todo
+            //Forzar camara para ver todo al ser espectador
             viewW = MAP_WIDTH;
             viewH = MAP_HEIGHT;
             camX = 0;
             camY = 0;
         } else {
-            // Cámara centrada en jugador
+            //Camara limitada para jugadores vivos
             viewW = 9;
             viewH = 9;
             camX = Math.max(0, Math.min(personaje.getX() - viewW / 2, MAP_WIDTH - viewW));
@@ -291,7 +284,7 @@ public class Map extends JPanel {
         VIEW_WIDTH = viewW;
         VIEW_HEIGHT = viewH;
 
-        // PINTAR
+        //Pinta todo
         paintMapa(g, camX, camY);
         System.out.println("→ repaint mapa. modoEspectador=" + modoEspectador + ", personaje=" + gManager.getPersonaje());
 

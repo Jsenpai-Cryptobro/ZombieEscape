@@ -84,7 +84,8 @@ public class ThreadCliente extends Thread {
     public void setEnMeta(boolean enMeta) {
         this.enMeta = enMeta;
     }
-
+    
+    //Metodos para enviar los datos al server
     public void enviarPosicionInicial(int x, int y) throws IOException {
         this.x = x;
         this.y = y;
@@ -119,7 +120,8 @@ public class ThreadCliente extends Thread {
             System.out.println("Error al enviar muerte: " + ex.getMessage());
         }
     }
-
+    
+    
     @Override
     public void run() {
         try {
@@ -132,8 +134,8 @@ public class ThreadCliente extends Thread {
                 switch (mensaje) {
                     case "START_GAME":
                         if (isAdmin) {
-                            String nombreMapa = entrada.readUTF(); // <-- recibe el nombre del mapa del admin
-                            servidor.iniciarJuego(this, nombreMapa); // <-- pásalo al servidor
+                            String nombreMapa = entrada.readUTF(); 
+                            servidor.iniciarJuego(this, nombreMapa); 
                         }
                         break;
                     case "MOVIMIENTO":

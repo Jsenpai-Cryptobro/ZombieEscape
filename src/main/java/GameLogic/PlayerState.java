@@ -8,6 +8,8 @@ package GameLogic;
  *
  * @author jsero
  */
+
+//Enum para indicar el estado en el que se encuentra x jugador
 public enum PlayerState {
     IN_WAITING_ROOM,
     READY,

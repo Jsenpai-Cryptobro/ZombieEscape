@@ -9,7 +9,8 @@ package GameLogic;
  * @author jsero
  */
 public class FileManager {
-
+    
+    //Carga un mapa leyendolo de un archivo
     public static int[][] cargarMapaDesdeArchivo(String ruta) {
         java.util.List<int[]> filas = new java.util.ArrayList<>();
 

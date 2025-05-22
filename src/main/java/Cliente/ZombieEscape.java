@@ -17,13 +17,13 @@ public class ZombieEscape {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            // Pedir nombre
+            //Pedir nombre
             String nombre = JOptionPane.showInputDialog("Ingresa tu nombre:");
             if (nombre == null || nombre.trim().isEmpty()) {
                 nombre = "Jugador" + System.currentTimeMillis() % 1000;
             }
 
-            // Crear cliente y conectar al servidor
+            //Crear cliente y conectar al servidor
             ClienteJuego cliente = new ClienteJuego(nombre);
             new Thread(() -> {
                 cliente.conectar("localhost", 8085);

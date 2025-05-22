@@ -24,10 +24,11 @@ public class Controller implements KeyListener {
         this.map = map;
         this.cliente = cliente;
     }
-
+    
+    
     @Override
     public void keyPressed(KeyEvent e) {
-        if (cliente.getEstado() == PlayerState.MUERTO) {
+        if (cliente.getEstado() == PlayerState.MUERTO) { //Si esta muerto que no se mueva
             return;
         }
         
@@ -63,14 +64,13 @@ public class Controller implements KeyListener {
             }
         }
     }
-
+    
+    //Revisa que la posicion a la que quiero ir sea valida
     private boolean esMovimientoValido(int x, int y) {
-        // Verify coordinates are within map bounds
         if (x < 0 || x >= map.getMAP_WIDTH() || y < 0 || y >= map.getMAP_HEIGHT()) {
             return false;
         }
 
-        // Check if it's not an obstacle (tile value 1)
         return map.getTileAt(x, y) != 1;
     }
 
