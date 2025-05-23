@@ -72,7 +72,7 @@ public class ServidorJuego {
         clientes.put(nombre, hilo);
         broadcastPlayerList();
     }
-    
+
     //Cambia al siguiente nivel (Aca toda hacer que el los mapas tengan el nombre mapa#.txt) asi simplemente
     //se crea un atributo de lvlActual y va cambiando conforme se supera un nivel
     public void avanzarNivel() {
@@ -110,7 +110,7 @@ public class ServidorJuego {
 
         iniciarZombieManager();
     }
-    
+
     //Verifica que todos esten en la meta para poder avanzar de nivel
     public void verificarMetaGlobal() {
         //System.out.println("Verificando si todos los jugadores llegaron a la meta");//Esto es para ver si se esta activando o no pq no me esta sirviendo
@@ -226,28 +226,32 @@ public class ServidorJuego {
     public synchronized void iniciarJuego(ThreadCliente iniciador, String nombreMapa) {
         if (iniciador == adminCliente && !gameStarted) {
             gameStarted = true;
-
+            
+            //Consigue archivo del mapa
             File archivoMapa = new File("maps/" + nombreMapa);
             if (!archivoMapa.exists()) {
                 System.err.println("El mapa no existe: " + nombreMapa + ". Usando mapa.txt por defecto.");
                 archivoMapa = new File("maps/mapa.txt");
             }
-
+            
+            //Carga el mapa
             this.mapa = FileManager.cargarMapaDesdeArchivo(archivoMapa.getPath());
             if (this.mapa == null) {
                 System.err.println("Error cargando el mapa: " + archivoMapa.getPath());
                 return;
             }
-
+            
+            //Crea zombies
             for (int y = 0; y < mapa.length; y++) {
                 for (int x = 0; x < mapa[0].length; x++) {
-                    if (mapa[y][x] == 2) { // Tile 2 = spawn de zombie
+                    if (mapa[y][x] == 2) { //Tile 2 = spawn de zombie
                         zombies.add(new Zombie(x, y, Color.GREEN));
                         System.out.println("Zombie creado en: " + x + "," + y);
                     }
                 }
             }
-
+            
+            //Envia mapa a los clientes
             for (ThreadCliente cliente : clientes.values()) {
                 try {
                     cliente.enviarInicioJuego();
@@ -257,11 +261,12 @@ public class ServidorJuego {
                 }
             }
 
-            // Crear zombies en posiciones específicas del mapa (por ejemplo, donde haya valor 2)
+            //Inicia bien a los zombies
             iniciarZombieManager();
         }
     }
-
+    
+    //Vuelve a sala de espera
     public void volverASala() {
         gameStarted = false;
         zombies.clear();
@@ -275,7 +280,8 @@ public class ServidorJuego {
             }
         }
     }
-
+    
+    //Verifica la vision de los zombies por si choca con un jugador
     public void verificarColisionesConJugadores() throws IOException {
         for (Zombie z : zombies) {
             int zx = z.getX();
@@ -333,7 +339,8 @@ public class ServidorJuego {
         }
 
     }
-
+    
+    //Reinicia el juego cuando alguien es atrapado
     public void reiniciarJuegoExcepto(ThreadCliente muerto) {
         for (ThreadCliente cliente : clientes.values()) {
             if (cliente != muerto && cliente.getEstado() != PlayerState.MUERTO) {
@@ -345,9 +352,16 @@ public class ServidorJuego {
                 }
             }
         }
+        if (muerto != null) {
+            try {
+                muerto.enviarInicioJuego();
+                enviarMapaInicial(muerto);
+            } catch (IOException ex) {
+                System.out.println("Error al enviar mapa al jugador espectador " + muerto.getNombre() + ": " + ex.getMessage());
+            }
+        }
     }
-    
-    
+
     public void iniciarZombieManager() {
         // Detener hilo anterior si está corriendo
         if (zombieManagerThread != null && zombieManagerThread.isAlive()) {
@@ -365,11 +379,11 @@ public class ServidorJuego {
 
                 if (!gameStarted) {
                     try {
-                        Thread.sleep(200); // Evitar consumir CPU en espera
+                        Thread.sleep(200); //Evitar consumir CPU en espera
                     } catch (InterruptedException e) {
                         break;
                     }
-                    continue; // No hacer nada si el juego aún no ha empezado
+                    continue; //No hacer nada si el juego aun no ha empezado
                 }
 
                 moverZombies();
@@ -389,7 +403,7 @@ public class ServidorJuego {
         });
         zombieManagerThread.start();
     }
-    
+
     //Va moviendo los zombies
     public void moverZombies() {
         for (Zombie zombie : zombies) {
@@ -418,7 +432,7 @@ public class ServidorJuego {
             }
         }
     }
-    
+
     //Envia las posiciones actuales de los zombies al clienteJuego
     public void enviarPosicionesZombies() {
         for (ThreadCliente cliente : clientes.values()) {
@@ -436,7 +450,7 @@ public class ServidorJuego {
             }
         }
     }
-    
+
     //Envia la posicion inicial de los zombies al clienteJuego
     public void enviarZombiesIniciales(ThreadCliente cliente) {
         try {
@@ -502,6 +516,17 @@ public class ServidorJuego {
                 otros.getSalida().writeUTF(cliente.getNombre());
             } catch (IOException ex) {
                 System.out.println("Error al notificar desconexion a " + otros.getNombre());
+            }
+        }
+    }
+
+    public void enviarChat(String mensaje) {
+        for (ThreadCliente cliente : clientes.values()) {
+            try {
+                cliente.getSalida().writeUTF("CHAT");
+                cliente.getSalida().writeUTF(mensaje);
+            } catch (IOException e) {
+                System.out.println("Error al enviar chat a " + cliente.getNombre());
             }
         }
     }

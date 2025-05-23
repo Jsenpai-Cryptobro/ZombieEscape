@@ -8,7 +8,9 @@ import GUI.WaitingRoom;
 import GameLogic.Map;
 import GameLogic.PlayerState;
 import Personajes.Controller;
+import Personajes.Personaje;
 import Personajes.Zombie;
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.io.DataInputStream;
@@ -17,8 +19,13 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 /**
@@ -39,6 +46,8 @@ public class ClienteJuego {
     private JFrame waitingFrame;
     private boolean isAdmin = false;
     private final List<Zombie> zombiesSincronizados = new ArrayList<>();
+
+    private JTextArea chatArea;
 
     public ClienteJuego(String nombre) {
         this.nombre = nombre;
@@ -110,23 +119,19 @@ public class ClienteJuego {
     }
 
     //Ayuda a hacer todo lo necesario para que el juego inicie
-    private void handleInicioJuego() {
+    public void handleInicioJuego() {
         try {
             iniciarJuego();
             cargarMapaDesdeServidor();
             estado = PlayerState.IN_GAME;
             conectado = true;
-
-            // Asegurar que no esté en modo espectador al iniciar juego
-            if (mapa != null) {
-                mapa.setModoEspectador(false);
-            }
         } catch (IOException e) {
-            System.err.println("Error starting game: " + e.getMessage());
+            /*System.err.println("Error starting game: " + e.getMessage());
             JOptionPane.showMessageDialog(null,
                     "Error starting game: " + e.getMessage(),
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
+            */
         }
     }
 
@@ -150,30 +155,90 @@ public class ClienteJuego {
         if (gameFrame != null) {
             gameFrame.dispose();
         }
+
         SwingUtilities.invokeLater(() -> {
-            //Crea un frame que se cierra al salir
+            //Modificar tamaño de la ventana a gusto
+            final int FRAME_WIDTH = 346;
+            final int FRAME_HEIGHT = 480;
+            final int MAPA_HEIGHT = 600;
+            final int CHAT_HEIGHT = 120;
+
+            // Crear el frame
             gameFrame = new JFrame("Zombie Escape - " + nombre);
             gameFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            gameFrame.setResizable(false);
 
-            //Crea mapa
+            // Panel principal con BorderLayout
+            JPanel mainPanel = new JPanel(new BorderLayout());
+            mainPanel.setPreferredSize(new Dimension(FRAME_WIDTH, FRAME_HEIGHT));
+
+            // === MAPA ===
             mapa = new Map();
             mapa.setZombiesSincronizados(zombiesSincronizados);
-
-            //Crea el controller(recibe las señales del teclado)
             Controller controller = new Controller(mapa, this);
             mapa.setController(controller);
 
-            //Termina de configurar el frame
-            gameFrame.add(mapa);
-            gameFrame.setSize(mapa.getMAP_WIDTH() * 35 + 16, mapa.getMAP_HEIGHT() * 35 + 39);
-            gameFrame.setLocationRelativeTo(null);
+            // IMPORTANTE: dejar que el Map pinte su tamaño natural, sin envolverlo
+            JScrollPane mapaScroll = new JScrollPane(mapa);
+            mapaScroll.setPreferredSize(new Dimension(FRAME_WIDTH, MAPA_HEIGHT));
+            mapaScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+            mapaScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
-            //Cierra la sala de espera para dar paso al mapa de juego
-            if (waitingFrame != null) {
-                waitingFrame.dispose();
-            }
+            mainPanel.add(mapaScroll, BorderLayout.CENTER);
+
+            // === CHAT ===
+            JPanel chatPanel = new JPanel(new BorderLayout());
+
+            chatArea = new JTextArea(5, 30);
+            chatArea.setEditable(false);
+            JScrollPane chatScroll = new JScrollPane(chatArea);
+            chatPanel.add(chatScroll, BorderLayout.CENTER);
+            chatScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+
+            JTextField chatInput = new JTextField();
+            JButton sendButton = new JButton("Enviar");
+
+            JPanel inputPanel = new JPanel(new BorderLayout());
+            inputPanel.add(chatInput, BorderLayout.CENTER);
+            inputPanel.add(sendButton, BorderLayout.EAST);
+            chatPanel.add(inputPanel, BorderLayout.SOUTH);
+
+            chatPanel.setPreferredSize(new Dimension(FRAME_WIDTH, CHAT_HEIGHT));
+            mainPanel.add(chatPanel, BorderLayout.SOUTH);
+
+            // Agregar al frame
+            gameFrame.setContentPane(mainPanel);
+            gameFrame.pack(); // asegura layout sin que se reduzca el frame
+            gameFrame.setSize(FRAME_WIDTH, FRAME_HEIGHT);
+            gameFrame.setResizable(false);
+            gameFrame.setLocationRelativeTo(null);
             gameFrame.setVisible(true);
+
+            // Cerrar sala de espera si existe
+            if (waitingFrame != null && waitingFrame.isDisplayable()) {
+                waitingFrame.setVisible(false);
+                waitingFrame.dispose();
+                waitingFrame = null;
+            }
+
             mapa.requestFocusInWindow();
+
+            // Listener para enviar mensajes
+            sendButton.addActionListener(e -> {
+                String msg = chatInput.getText().trim();
+                if (!msg.isEmpty()) {
+                    try {
+                        salida.writeUTF("CHAT");
+                        salida.writeUTF(nombre + ": " + msg);
+                        chatInput.setText("");
+                    } catch (IOException ex) {
+                        chatArea.append("Error al enviar mensaje.\n");
+                    }
+                }
+                mapa.requestFocusInWindow();
+            });
+
+            chatInput.addActionListener(sendButton.getActionListeners()[0]);
         });
     }
 
@@ -214,16 +279,9 @@ public class ClienteJuego {
                     if (estado == PlayerState.MUERTO) {
                         mapa.setModoEspectador(true);
                     }
-
                     mapa.requestFocusInWindow();
 
-                    //Ajusta tamaño de ventana a tamaño del mapa (REVISAR ESTO)
-                    int w = mapa.getMAP_WIDTH() * 35 + 16;
-                    int h = mapa.getMAP_HEIGHT() * 35 + 39;
-
                     if (gameFrame != null) {
-                        gameFrame.setSize(w, h);
-                        gameFrame.setMinimumSize(new Dimension(w, h));
                         gameFrame.setLocationRelativeTo(null);
                     }
                 }
@@ -231,20 +289,28 @@ public class ClienteJuego {
 
             //Recibe los jugadores
             int numJugadores = entrada.readInt();
-            if (numJugadores < 0 || numJugadores > 10) {
+            if (numJugadores < 1 || numJugadores > 10) {
                 throw new IOException("Invalid number of players: " + numJugadores);
             }
 
             for (int i = 0; i < numJugadores; i++) {
-                String nombre = entrada.readUTF();
+                String nombreJugador = entrada.readUTF();
                 int x = entrada.readInt();
                 int y = entrada.readInt();
-                if (x >= 0 && x < ancho && y >= 0 && y < alto) {
-                    SwingUtilities.invokeLater(() -> {
-                        mapa.getManager().actualizarPosicionJugador(nombre, x, y);
-                    });
-                }
+
+                SwingUtilities.invokeLater(() -> {
+                    // Actualizar para todos los jugadores, incluyendo el local
+                    if (nombreJugador.equals(nombre)) {
+                        // Solo crear personaje local si no existe
+                        if (mapa.getManager().getPersonaje() == null) {
+                            mapa.getManager().setPersonaje(new Personaje(x, y, Color.BLUE));
+                        }
+                    } else {
+                        mapa.getManager().actualizarPosicionJugador(nombreJugador, x, y);
+                    }
+                });
             }
+
         } catch (OutOfMemoryError e) {
             throw new IOException("Map too large to load: " + e.getMessage());
         }
@@ -353,10 +419,18 @@ public class ClienteJuego {
                         });
                         break;
 
+                    case "CHAT": //Mensajes
+                        String mensaje = entrada.readUTF();
+                        SwingUtilities.invokeLater(() -> {
+                            chatArea.append(mensaje + "\n");
+                        });
+                        break;
+
                 }
             }
         } catch (IOException ex) {
             System.out.println("Desconectado del servidor");
         }
     }
+
 }

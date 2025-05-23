@@ -13,6 +13,11 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Point;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,8 +35,13 @@ public class Map extends JPanel {
     private int MAP_WIDTH, MAP_HEIGHT;
     private int VIEW_WIDTH = 9, VIEW_HEIGHT = 9; //Tamaño de la vista del jugador
 
+    private float camXManual = 0;
+    private float camYManual = 0;
+    private Point lastMouseDrag = null;
+    private float zoomFactor = 1.0f; // Para posible funcionalidad de zoom
+
     private HashMap<Point, Integer> mapaTiles; //Mapa que funciona con hash porque la matriz sola me estaba cagando la existencia para metodos que hice luego
-    private List<Zombie> zombiesSincronizados = new ArrayList<>(); 
+    private List<Zombie> zombiesSincronizados = new ArrayList<>();
 
     private Controller controller;
     private GameManager gManager;
@@ -43,23 +53,98 @@ public class Map extends JPanel {
         gManager = new GameManager(this);
         mapaTiles = new HashMap<>();
         setFocusable(true);
+        setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
+
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                lastMouseDrag = e.getPoint();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                lastMouseDrag = null;
+            }
+        });
+
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (modoEspectador || gManager.getPersonaje() == null) {
+                    if (lastMouseDrag != null) {
+                        // Calcula el desplazamiento en píxeles
+                        int dx = e.getX() - lastMouseDrag.x;
+                        int dy = e.getY() - lastMouseDrag.y;
+
+                        // Convierte el desplazamiento a tiles con suavizado
+                        float tileDx = dx / (float) TILE_SIZE * zoomFactor;
+                        float tileDy = dy / (float) TILE_SIZE * zoomFactor;
+
+                        // Aplica el movimiento a la cámara
+                        camXManual -= tileDx;
+                        camYManual -= tileDy;
+
+                        // Asegura que la cámara no salga de los límites
+                        int maxX = Math.max(0, MAP_WIDTH - VIEW_WIDTH);
+                        int maxY = Math.max(0, MAP_HEIGHT - VIEW_HEIGHT);
+                        camXManual = Math.max(0, Math.min(camXManual, maxX));
+                        camYManual = Math.max(0, Math.min(camYManual, maxY));
+
+                        lastMouseDrag = e.getPoint();
+                        repaint();
+                    }
+                }
+            }
+        });
+
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (modoEspectador || gManager.getPersonaje() == null) {
+                    switch (e.getKeyCode()) {
+                        case KeyEvent.VK_W, KeyEvent.VK_UP ->
+                            camYManual--;
+                        case KeyEvent.VK_S, KeyEvent.VK_DOWN ->
+                            camYManual++;
+                        case KeyEvent.VK_A, KeyEvent.VK_LEFT ->
+                            camXManual--;
+                        case KeyEvent.VK_D, KeyEvent.VK_RIGHT ->
+                            camXManual++;
+                    }
+
+                    int maxX = Math.max(0, MAP_WIDTH - VIEW_WIDTH);
+                    int maxY = Math.max(0, MAP_HEIGHT - VIEW_HEIGHT);
+                    camXManual = Math.max(0, Math.min(camXManual, maxX));
+                    camYManual = Math.max(0, Math.min(camYManual, maxY));
+
+                    repaint();
+                }
+            }
+        });
+
+        addMouseWheelListener(e -> {
+            if (modoEspectador) {
+                float zoom = zoomFactor - e.getWheelRotation() * 0.1f;
+                // Limita el zoom entre 1.0x (tamaño original) y 2.0x (máximo acercamiento)
+                zoom = Math.max(1.0f, Math.min(zoom, 2.0f)); // 1.0f es el zoom mínimo (tamaño original)
+                setZoom(zoom);
+            }
+        });
+
+        setDoubleBuffered(true);
     }
-    
+
     //GETTERS Y SETTERS
     public void setModoEspectador(boolean b) {
         this.modoEspectador = b;
-
-        //Al entrar a modo espectador, elimina el personaje que murio
         if (b) {
             gManager.setPersonaje(null);
-            VIEW_WIDTH = MAP_WIDTH;
-            VIEW_HEIGHT = MAP_HEIGHT;
             setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
             revalidate();
             repaint();
         }
     }
-    
+
     public void setZombiesSincronizados(List<Zombie> zombies) {
         this.zombiesSincronizados = zombies;
         repaint();
@@ -73,11 +158,8 @@ public class Map extends JPanel {
         for (int y = 0; y < MAP_HEIGHT; y++) {
             for (int x = 0; x < MAP_WIDTH; x++) {
                 int valor = nuevoMapa[y][x];
-
                 if (valor != 0) {
                     mapaTiles.put(new Point(x, y), valor);
-
-                    // Solo crear personaje si no hay uno y NO es espectador
                     if (valor == 4 && gManager.getPersonaje() == null && !modoEspectador) {
                         gManager.setPersonaje(new Personaje(x, y, Color.BLUE));
                     }
@@ -85,10 +167,7 @@ public class Map extends JPanel {
             }
         }
 
-        //Ajusta vista a la del espectador
         if (modoEspectador) {
-            VIEW_WIDTH = MAP_WIDTH;
-            VIEW_HEIGHT = MAP_HEIGHT;
             setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
             revalidate();
         }
@@ -99,7 +178,7 @@ public class Map extends JPanel {
     public int getTile(int x, int y) {
         return mapaTiles.getOrDefault(new Point(x, y), 0);
     }
-    
+
     public void setController(Controller controller) {
         removeKeyListener(this.controller);
         this.controller = controller;
@@ -132,7 +211,7 @@ public class Map extends JPanel {
 
     //Valor de una casilla en coordenadas especificas
     public int getTileAt(int x, int y) {
-        return mapaTiles.getOrDefault(new Point(x, y), 0); 
+        return mapaTiles.getOrDefault(new Point(x, y), 0);
     }
 
     public void setTileAt(int x, int y, int value) {
@@ -147,12 +226,12 @@ public class Map extends JPanel {
     public boolean isInBounds(int x, int y) {
         return x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
     }
-    
+
     //Genera los zombies en el mapa
     public void generarZombie(int mapY, int mapX) {
-        mapaTiles.remove(new Point(mapX, mapY)); 
+        mapaTiles.remove(new Point(mapX, mapY));
         Zombie zombie = new Zombie(mapX, mapY, Color.GREEN);
-        gManager.getZombiesInstancias().add(zombie); 
+        gManager.getZombiesInstancias().add(zombie);
 
         ZombieThread thread = new ZombieThread(zombie, this);
         gManager.getZombies().add(thread);
@@ -256,37 +335,23 @@ public class Map extends JPanel {
     //Aca es donde se van pintando todos los componentes de la camara, con cada movimiento o suceso se actualiza
     @Override
     public void paintComponent(Graphics g) {
-
         super.paintComponent(g);
         Personaje personaje = gManager.getPersonaje();
-
         if (modoEspectador) {
-            personaje = null; //Forzar que si es espectador no tenga personaje
+            personaje = null;
         }
 
-        int camX = 0, camY = 0;
-        int viewW, viewH;
-
-        if (modoEspectador || personaje == null) {
-            //Forzar camara para ver todo al ser espectador
-            viewW = MAP_WIDTH;
-            viewH = MAP_HEIGHT;
-            camX = 0;
-            camY = 0;
+        int camX, camY;
+        if (personaje != null && !modoEspectador) {
+            camX = Math.max(0, Math.min(personaje.getX() - VIEW_WIDTH / 2, MAP_WIDTH - VIEW_WIDTH));
+            camY = Math.max(0, Math.min(personaje.getY() - VIEW_HEIGHT / 2, MAP_HEIGHT - VIEW_HEIGHT));
         } else {
-            //Camara limitada para jugadores vivos
-            viewW = 9;
-            viewH = 9;
-            camX = Math.max(0, Math.min(personaje.getX() - viewW / 2, MAP_WIDTH - viewW));
-            camY = Math.max(0, Math.min(personaje.getY() - viewH / 2, MAP_HEIGHT - viewH));
+            // Convierte las coordenadas float a int para el renderizado
+            camX = (int) Math.max(0, Math.min(camXManual, MAP_WIDTH - VIEW_WIDTH));
+            camY = (int) Math.max(0, Math.min(camYManual, MAP_HEIGHT - VIEW_HEIGHT));
         }
 
-        VIEW_WIDTH = viewW;
-        VIEW_HEIGHT = viewH;
-
-        //Pinta todo
         paintMapa(g, camX, camY);
-        System.out.println("→ repaint mapa. modoEspectador=" + modoEspectador + ", personaje=" + gManager.getPersonaje());
 
         if (personaje != null && !modoEspectador) {
             paintJugador(g, personaje, camX, camY);
@@ -298,4 +363,26 @@ public class Map extends JPanel {
 
         paintZombies(g, camX, camY);
     }
+
+    public void setZoom(float factor) {
+        zoomFactor = factor;
+        TILE_SIZE = (int) (35 * zoomFactor);
+        setPreferredSize(new Dimension(VIEW_WIDTH * TILE_SIZE, VIEW_HEIGHT * TILE_SIZE));
+        revalidate();
+        repaint();
+    }
+
+    public void centrarCamaraEn(int x, int y) {
+        camXManual = x - VIEW_WIDTH / 2;
+        camYManual = y - VIEW_HEIGHT / 2;
+
+        // Aplicar límites
+        int maxX = Math.max(0, MAP_WIDTH - VIEW_WIDTH);
+        int maxY = Math.max(0, MAP_HEIGHT - VIEW_HEIGHT);
+        camXManual = Math.max(0, Math.min(camXManual, maxX));
+        camYManual = Math.max(0, Math.min(camYManual, maxY));
+
+        repaint();
+    }
+
 }
