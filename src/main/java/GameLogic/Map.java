@@ -150,7 +150,7 @@ public class Map extends JPanel {
         repaint();
     }
 
-    public void setMapa(int[][] nuevoMapa) {
+    public void setMapa(int[][] nuevoMapa, boolean crearPersonajeLocal) {
         MAP_HEIGHT = nuevoMapa.length;
         MAP_WIDTH = nuevoMapa[0].length;
         mapaTiles.clear();
@@ -160,9 +160,10 @@ public class Map extends JPanel {
                 int valor = nuevoMapa[y][x];
                 if (valor != 0) {
                     mapaTiles.put(new Point(x, y), valor);
-                    if (valor == 4 && gManager.getPersonaje() == null && !modoEspectador) {
-                        gManager.setPersonaje(new Personaje(x, y, Color.BLUE));
-                    }
+                    // Esto ya NO se hace aquí
+                    // if (valor == 4 && gManager.getPersonaje() == null && !modoEspectador && crearPersonajeLocal) {
+                    //    gManager.setPersonaje(new Personaje(x, y, Color.BLUE));
+                    // }
                 }
             }
         }

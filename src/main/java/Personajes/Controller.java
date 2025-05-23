@@ -36,7 +36,12 @@ public class Controller implements KeyListener {
             Personaje personaje = map.getManager().getPersonaje();
             int newX = personaje.getX();
             int newY = personaje.getY();
-
+            
+            //Si ya esta en el spawn que no se pueda mover
+            if(map.getTileAt(newX, newY)==5){
+                return;
+            }
+            
             switch (e.getKeyCode()) {
                 case KeyEvent.VK_W:
                     newY--;
@@ -51,7 +56,7 @@ public class Controller implements KeyListener {
                     newX++;
                     break;
             }
-
+            
             if (esMovimientoValido(newX, newY)) {
                 personaje.setX(newX);
                 personaje.setY(newY);

@@ -16,6 +16,7 @@ import java.awt.Dimension;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
@@ -120,19 +121,10 @@ public class ClienteJuego {
 
     //Ayuda a hacer todo lo necesario para que el juego inicie
     public void handleInicioJuego() {
-        try {
-            iniciarJuego();
-            cargarMapaDesdeServidor();
-            estado = PlayerState.IN_GAME;
-            conectado = true;
-        } catch (IOException e) {
-            /*System.err.println("Error starting game: " + e.getMessage());
-            JOptionPane.showMessageDialog(null,
-                    "Error starting game: " + e.getMessage(),
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE);
-            */
-        }
+        iniciarJuego(); // Opcional: JOptionPane.showMessageDialog(null, "Error starting game: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        cargarMapaDesdeServidor();
+        estado = PlayerState.IN_GAME;
+        conectado = true;
     }
 
     //Envia el movimiento de este cliente
@@ -243,16 +235,16 @@ public class ClienteJuego {
     }
 
     //Carga y crea el mapa que recibe del server
-    public void cargarMapaDesdeServidor() throws IOException {
-        //Recibe las dimensiones del mapa y las valida
-        int ancho = entrada.readInt();
-        int alto = entrada.readInt();
-
-        if (ancho <= 0 || alto <= 0 || ancho > 1000 || alto > 1000) {
-            throw new IOException("Invalid map dimensions received: " + ancho + "x" + alto);
-        }
-
+    public void cargarMapaDesdeServidor() {
         try {
+            //Recibe las dimensiones del mapa y las valida
+            int ancho = entrada.readInt();
+            int alto = entrada.readInt();
+
+            if (ancho <= 0 || alto <= 0 || ancho > 1000 || alto > 1000) {
+                throw new IOException("Invalid map dimensions received: " + ancho + "x" + alto);
+            }
+
             int[][] mapaServidor = new int[alto][ancho];
             int nonEmptyTiles = entrada.readInt();
 
@@ -272,47 +264,52 @@ public class ClienteJuego {
                 }
             }
 
-            //Actualiza UI
-            SwingUtilities.invokeLater(() -> {
-                if (mapa != null) {
-                    mapa.setMapa(mapaServidor);
-                    if (estado == PlayerState.MUERTO) {
-                        mapa.setModoEspectador(true);
+            // Actualiza UI
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    if (mapa != null) {
+                        mapa.setMapa(mapaServidor, false); // false: no crear personaje local aquí
+                        if (estado == PlayerState.MUERTO) {
+                            mapa.setModoEspectador(true);
+                        }
+                        mapa.requestFocusInWindow();
+                        if (gameFrame != null) {
+                            gameFrame.setLocationRelativeTo(null);
+                        }
                     }
-                    mapa.requestFocusInWindow();
+                });
+            } catch (InterruptedException | InvocationTargetException e) {
+                System.err.println("Error al actualizar UI del mapa: " + e.getMessage());
+            }
 
-                    if (gameFrame != null) {
-                        gameFrame.setLocationRelativeTo(null);
-                    }
-                }
-            });
-
-            //Recibe los jugadores
+            // Recibe los jugadores y actualiza todos (local y remotos)
             int numJugadores = entrada.readInt();
             if (numJugadores < 1 || numJugadores > 10) {
                 throw new IOException("Invalid number of players: " + numJugadores);
             }
 
+            List<Runnable> actualizaciones = new ArrayList<>();
             for (int i = 0; i < numJugadores; i++) {
                 String nombreJugador = entrada.readUTF();
                 int x = entrada.readInt();
                 int y = entrada.readInt();
 
-                SwingUtilities.invokeLater(() -> {
-                    // Actualizar para todos los jugadores, incluyendo el local
+                actualizaciones.add(() -> {
                     if (nombreJugador.equals(nombre)) {
-                        // Solo crear personaje local si no existe
-                        if (mapa.getManager().getPersonaje() == null) {
-                            mapa.getManager().setPersonaje(new Personaje(x, y, Color.BLUE));
-                        }
+                        mapa.getManager().setPersonaje(new Personaje(x, y, Color.BLUE));
                     } else {
                         mapa.getManager().actualizarPosicionJugador(nombreJugador, x, y);
                     }
                 });
             }
 
-        } catch (OutOfMemoryError e) {
-            throw new IOException("Map too large to load: " + e.getMessage());
+            SwingUtilities.invokeLater(() -> {
+                actualizaciones.forEach(Runnable::run);
+                mapa.repaint();
+            });
+
+        } catch (IOException e) {
+            System.err.println("Error cargando mapa: " + e.getMessage());
         }
     }
 
@@ -414,7 +411,6 @@ public class ClienteJuego {
                             if (gameFrame != null) {
                                 gameFrame.dispose();
                             }
-
                             mostrarWaitingRoom();
                         });
                         break;
@@ -425,10 +421,9 @@ public class ClienteJuego {
                             chatArea.append(mensaje + "\n");
                         });
                         break;
-
                 }
             }
-        } catch (IOException ex) {
+        } catch (IOException e) {
             System.out.println("Desconectado del servidor");
         }
     }

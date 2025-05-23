@@ -10,6 +10,7 @@ import GameLogic.FileManager;
 import GameLogic.PlayerState;
 import Personajes.Zombie;
 import java.awt.Color;
+import java.awt.Point;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -88,6 +89,12 @@ public class ServidorJuego {
         this.mapa = FileManager.cargarMapaDesdeArchivo(archivoSiguiente.getPath());
         for (ThreadCliente cliente : clientes.values()) {
             cliente.setEnMeta(false);
+        }
+
+        // Coloca a los jugadores en los spawns antes de enviar el mapa
+        colocarJugadoresEnSpawn();
+
+        for (ThreadCliente cliente : clientes.values()) {
             try {
                 cliente.enviarInicioJuego();
                 enviarMapaInicial(cliente);
@@ -107,7 +114,6 @@ public class ServidorJuego {
         }
 
         gameStarted = true;
-
         iniciarZombieManager();
     }
 
@@ -200,16 +206,17 @@ public class ServidorJuego {
             }
 
             //Manda los jugadores
+            // Por esto
             int playerCount = 0;
             for (ThreadCliente otro : clientes.values()) {
-                if (!otro.getNombre().equals(cliente.getNombre()) && otro.getEstado() != PlayerState.MUERTO) {
+                if (otro.getEstado() != PlayerState.MUERTO) {
                     playerCount++;
                 }
             }
             salida.writeInt(playerCount);
 
             for (ThreadCliente otro : clientes.values()) {
-                if (!otro.getNombre().equals(cliente.getNombre()) && otro.getEstado() != PlayerState.MUERTO) {
+                if (otro.getEstado() != PlayerState.MUERTO) {
                     salida.writeUTF(otro.getNombre());
                     salida.writeInt(otro.getX());
                     salida.writeInt(otro.getY());
@@ -226,22 +233,23 @@ public class ServidorJuego {
     public synchronized void iniciarJuego(ThreadCliente iniciador, String nombreMapa) {
         if (iniciador == adminCliente && !gameStarted) {
             gameStarted = true;
-            
+
             //Consigue archivo del mapa
             File archivoMapa = new File("maps/" + nombreMapa);
             if (!archivoMapa.exists()) {
                 System.err.println("El mapa no existe: " + nombreMapa + ". Usando mapa.txt por defecto.");
                 archivoMapa = new File("maps/mapa.txt");
             }
-            
+
             //Carga el mapa
             this.mapa = FileManager.cargarMapaDesdeArchivo(archivoMapa.getPath());
             if (this.mapa == null) {
                 System.err.println("Error cargando el mapa: " + archivoMapa.getPath());
                 return;
             }
-            
+
             //Crea zombies
+            zombies.clear();
             for (int y = 0; y < mapa.length; y++) {
                 for (int x = 0; x < mapa[0].length; x++) {
                     if (mapa[y][x] == 2) { //Tile 2 = spawn de zombie
@@ -250,7 +258,10 @@ public class ServidorJuego {
                     }
                 }
             }
-            
+
+            // Coloca a los jugadores en los spawns antes de enviar el mapa
+            colocarJugadoresEnSpawn();
+
             //Envia mapa a los clientes
             for (ThreadCliente cliente : clientes.values()) {
                 try {
@@ -265,7 +276,7 @@ public class ServidorJuego {
             iniciarZombieManager();
         }
     }
-    
+
     //Vuelve a sala de espera
     public void volverASala() {
         gameStarted = false;
@@ -280,7 +291,7 @@ public class ServidorJuego {
             }
         }
     }
-    
+
     //Verifica la vision de los zombies por si choca con un jugador
     public void verificarColisionesConJugadores() throws IOException {
         for (Zombie z : zombies) {
@@ -339,9 +350,12 @@ public class ServidorJuego {
         }
 
     }
-    
+
     //Reinicia el juego cuando alguien es atrapado
     public void reiniciarJuegoExcepto(ThreadCliente muerto) {
+        // Coloca a los jugadores en los spawns antes de enviar el mapa
+        colocarJugadoresEnSpawn();
+
         for (ThreadCliente cliente : clientes.values()) {
             if (cliente != muerto && cliente.getEstado() != PlayerState.MUERTO) {
                 try {
@@ -527,6 +541,32 @@ public class ServidorJuego {
                 cliente.getSalida().writeUTF(mensaje);
             } catch (IOException e) {
                 System.out.println("Error al enviar chat a " + cliente.getNombre());
+            }
+        }
+    }
+
+    private void colocarJugadoresEnSpawn() {
+        Point spawn = null;
+        for (int y = 0; y < mapa.length; y++) {
+            for (int x = 0; x < mapa[0].length; x++) {
+                if (mapa[y][x] == 4) { // Tile 4 = spawn de jugador
+                    spawn = new Point(x, y);
+                    break;
+                }
+            }
+            if (spawn != null) {
+                break;
+            }
+        }
+
+        if (spawn == null) {
+            spawn = new Point(0, 0); // Por si acaso no hay spawn en el mapa
+        }
+
+        for (ThreadCliente cliente : clientes.values()) {
+            if (cliente.getEstado() != PlayerState.MUERTO) {
+                cliente.setX(spawn.x);
+                cliente.setY(spawn.y);
             }
         }
     }
